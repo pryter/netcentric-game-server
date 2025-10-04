@@ -1,0 +1,32 @@
+{
+  "name": "game-server",
+  "version": "0.0.0",
+  "scripts": {
+    "test-start": "ts-node src/test.ts"
+  },
+  "dependencies": {
+    "cookie-parser": "~1.4.4",
+    "debug": "~2.6.9",
+    "dgram": "^1.0.1",
+    "finalhandler": "^2.1.0",
+    "http-errors": "~1.6.3",
+    "http-server": "^14.1.1",
+    "morgan": "~1.9.1",
+    "pug": "2.0.0-beta11",
+    "serve-static": "^2.2.0",
+    "uuid": "^13.0.0",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@babel/preset-typescript": "^7.27.1",
+    "@types/bun": "latest",
+    "@types/node": "^24.5.2",
+    "@types/serve-static": "^1.15.9",
+    "@types/finalhandler": "^1.2.4",
+    "@types/ws": "^8.18.1",
+    "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
+    "typescript": "^5.9.2"
+  },
+  "private": true
+}
