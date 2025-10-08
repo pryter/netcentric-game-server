@@ -3,6 +3,10 @@ import {MsgPayload, Payload, type PayloadMsgData} from "./Payload";
 import type {CoreGame, GlobalEventListener} from "./CoreGame";
 import {User} from "./User";
 export type ClientConnectionState = "guest" | "authenticated"
+import * as admin from "firebase-admin";
+import serviceAccount from "../../keys/fb-keys.json"
+import {getFirebaseApp} from "@lib/firebaseUtil";
+import {Database} from "@lib/Database";
 
 export type PayloadListener = (payload: MsgPayload, forwarder: ClientConnection) => void
 export class ClientConnection {
@@ -91,22 +95,43 @@ export class ClientConnection {
   }
 
 
-  protected _handleUpgrade(payload: Payload<{token: string}>) {
+  protected async _handleUpgrade(payload: Payload<{token: string}>) {
     const data = payload.getData()
 
-    if (data.token !== "12345") {
-      this.send(new MsgPayload({group: "upgrade", name: "upgrade-failed"}))
+    if (!data.token) {
+      this.send(new Payload("upgrade", {status: 1}))
       return
+    }
+
+    const app = getFirebaseApp()
+    const t = await app.auth().verifyIdToken(data.token)
+
+    if (!t.uid) {
+      this.send(new Payload("upgrade", {status: 1}))
+      return
+    }
+
+    let userd = Database.findUser(t.uid)
+
+
+    if (!userd) {
+      const nu = {
+        uid: t.uid,
+        avatar: t.picture,
+        score: 0,
+        level: 0
+      }
+
+      Database.createUser(nu)
+      userd = nu
     }
     // some firebase action here
     // get user from firebase
     // set user to this connection
     // upgrade to authenticated
-
-    const user = new User("1234567890", "test", "test")
-    this._user = user
+    this._user = new User(userd.uid)
     this.upgradeToAuthenticated()
-    this.send(new MsgPayload({group: "upgrade", name: "upgrade-success"}))
+    this.send(new Payload("upgrade", {status: 0, userData: userd}))
   }
 
   private _forwardMessage(data: websocket.RawData) {
@@ -117,6 +142,10 @@ export class ClientConnection {
       return;
     }
     if (messagePayload.getType() === "upgrade") {
+      // prevent duplicate upgrade
+      if (this._state === "authenticated") {
+        return;
+      }
       this._handleUpgrade(messagePayload)
       return
     }
@@ -131,7 +160,6 @@ export class ClientConnection {
       this._msgListeners(new MsgPayload(messagePayload.getData()), this)
     }
     // forward to global listener
-    this._globalMsgListeners(messagePayload, this)
+    this._globalMsgListeners(new MsgPayload(messagePayload.getData()), this)
   }
-
 }

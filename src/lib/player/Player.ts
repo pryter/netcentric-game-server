@@ -21,7 +21,7 @@ export class Player extends User {
       throw new Error("not authenticated connection cant be cast to player")
     }
 
-    super(connection.getUser() as User)
+    super(connection.getUser()?.getUid() as string)
     this._connection = connection
 
     this._inventory = new Inventory()

@@ -19,9 +19,9 @@ RoomState is the state of the room and will be used to determine what to show th
 type RoomState = "waiting" | "running" | "next-round-countdown" | "resolved"
 type PlayerData = {
   isReady: boolean,
-  displayName: string,
+  displayName?: string | undefined,
   id: string,
-  avatarUri: string,
+  avatarUri?: string | undefined,
   score: number,
 }
 
@@ -88,7 +88,7 @@ export class OriginalGameRoom extends GameRoom{
     // init player data for the room
     this._playerDataRecord[player.getUid()] = {
       isReady: false,
-      displayName: player.getName(),
+      displayName: player.getNickname(),
       id: player.getUid(),
       avatarUri: player.getAvatar(),
       score: 0,

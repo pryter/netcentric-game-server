@@ -1,33 +1,56 @@
+import {LowSync} from "lowdb";
+import {JSONFileSync} from "lowdb/node";
+import {Database, UserData} from "@lib/Database";
+
 export class User {
   private _uid: string;
-  private _name: string;
-  private _avatar: string;
 
-  constructor(user: User)
-  constructor(uid: string, name: string, avatar?: string)
+  constructor(uid: string)
 
   constructor(...args: any[]) {
-    if (args.length === 1) {
-      const user = args[0] as User
-      this._uid = user.getUid()
-      this._name = user.getName()
-      this._avatar = user.getAvatar()
-    } else {
-      this._uid = args[0]
-      this._name = args[1]
-      this._avatar = args[2] ?? "https://cdn.discordapp.com/embed/avatars/0.png"
-    }
+    this._uid = args[0]
   }
 
   public getUid() {
     return this._uid
   }
 
-  public getName() {
-    return this._name
+  public getNickname() {
+    const data = this._fetchUserDatabase()
+    return data.nickname
   }
 
   public getAvatar() {
-    return this._avatar
+    return this._fetchUserDatabase().avatar
+  }
+
+  public getUserData() {
+    return this._fetchUserDatabase()
+  }
+
+  public updateNickname(nickname: string) {
+    this._updateField("nickname", nickname)
+  }
+
+  private _updateField(name: keyof UserData, value: UserData[keyof UserData]) {
+    // @ts-ignore
+    const db = Database.loadUserDatabase()
+    db.read()
+    const data = db.data.users.find(u => u.uid === this._uid)
+    // @ts-ignore
+    data[name] = value
+
+    db.write()
+  }
+
+  private _fetchUserDatabase() {
+    const db = Database.loadUserDatabase()
+    db.read()
+    const data = db.data.users.find(u => u.uid === this._uid)
+    if (data) {
+      return data
+    }
+
+    throw new Error("user not found")
   }
 }

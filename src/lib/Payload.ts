@@ -4,7 +4,7 @@ export type FrameData = Record<string, any>
 
 // Status: 0 = success, 1 = error, 2 = unknown
 export type PayloadMsgData = {
-  group: "client-action" | "server-response" | "upgrade",
+  group: "client-action" | "server-response" | "upgrade" | "credential",
   name: string,
   status?: number,
   data?: any

@@ -23,7 +23,7 @@ export type TestRoomFrame = {
 
 export class TestGameRoom extends GameRoom {
   protected onRoomCreated(): void {
-      throw new Error("Method not implemented.");
+      return
   }
 
   // you could implement yourself a properties lvl etc..
