@@ -1,7 +1,7 @@
-import {CoreGame} from "../src/lib/CoreGame";
-import {ConnectionPool} from "../src/lib/ConnectionPool";
-import {Player} from "../src/lib/player/Player";
-import {MsgPayload, Payload} from "../src/lib/Payload";
+import {CoreGame} from "@lib/CoreGame";
+import {ConnectionPool} from "@lib/ConnectionPool";
+import {Player} from "@lib/player/Player";
+import {MsgPayload, Payload} from "@lib/Payload";
 
 const game = new CoreGame()
 const pool = new ConnectionPool().setGlobalListener(game.globalListener)

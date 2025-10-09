@@ -4,6 +4,7 @@ import {ClientConnection} from "./ClientConnection";
 import {Payload} from "./Payload";
 
 import type {CoreGame, GlobalEventListener} from "./CoreGame";
+import {MonitorClientConnection} from "@lib/MonitorClientConnection";
 
 type ConnectionRecord = Record<string, ClientConnection>
 
@@ -22,9 +23,15 @@ export class ConnectionPool {
     return this;
   }
   // every time the new connection is established
-  protected onConnection(ws: websocket.WebSocket) {
+  protected onConnection(ws: websocket.WebSocket, path: string) {
     const id = v4()
-    const cc = new ClientConnection(id, ws)
+
+    let cc: ClientConnection
+    if (path === "/monitoring") {
+      cc = new MonitorClientConnection(id, ws)
+    }else{
+      cc = new ClientConnection(id, ws)
+    }
 
     this._table[id] = cc
 
@@ -77,12 +84,17 @@ export class ConnectionPool {
   public startListening(port: number)  {
     try {
       const wss = new websocket.WebSocketServer({port: port, host: "0.0.0.0"})
-      wss.on("connection", (ws) => {
-        this.onConnection(ws)
+      wss.on("connection", (ws, req) => {
+        this.onConnection(ws, req.url ?? "")
       })
-      console.log("server started")
+      console.log("server started on", `0.0.0.0:${port}`)
+      console.log("note: monitoring client started on path /monitoring")
     } catch (e) {
       throw new Error("could not start listening")
     }
+  }
+
+  public tableToObject() {
+    return Object.values(this._table).map((c) => {return c.toObject()})
   }
 }

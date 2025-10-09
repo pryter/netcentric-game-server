@@ -4,18 +4,29 @@ import {TestGameRoom} from "./TestGameRoom";
 import {ClientConnection} from "./ClientConnection";
 import {Player} from "./player/Player";
 import {GameRoom} from "./GameRoom";
+import {OriginalGameRoom} from "../OriginalGameRoom";
+import {MonitorClientConnection} from "@lib/MonitorClientConnection";
+import serveStatic from "serve-static";
+import http from "node:http";
+import finalhandler from "finalhandler";
+import * as path from "node:path";
+import AdmZip from "adm-zip";
+import * as fs from "node:fs";
 
 export type GlobalEventListener = (payload: Payload, forwarder: ClientConnection) => void
 export class CoreGame {
 
   protected _roomRegistry: Record<string, GameRoom> = {}
+  private _monitoringSubscriber: Record<string, MonitorClientConnection> = {}
+  private _pool: ConnectionPool
 
   constructor() {
-
+    const pool = new ConnectionPool()
+    pool.setGlobalListener(this.globalListener)
+    this._pool = pool
   }
 
   public globalListener = (payload: Payload, forwarder: ClientConnection)=>  {
-    console.log("global listener", payload)
     switch (payload.getType()) {
     case "message":
       this._handleMessage(new MsgPayload(payload.getData()), forwarder)
@@ -23,13 +34,75 @@ export class CoreGame {
     }
   }
 
-  protected _handleMessage(payload: MsgPayload, forwarder: ClientConnection) {
+  private getCurrentRoomReg() {
+   return Object.values(this._roomRegistry).map((v) => ({id: v.getId(), ...v.getRoomData()}))
+  }
+
+  public broadcast = () => {
+    for (const subscriber of Object.values(this._monitoringSubscriber)) {
+      subscriber.send(new MsgPayload({group: "monitoring-event", name: "event", data: {
+          roomReg: this.getCurrentRoomReg(),
+          connectionPool: this._pool.tableToObject(),
+        }}))
+    }
+  }
+
+  public async startMonitoringStream(sample: number= 1) {
+    setInterval(() => {
+      this.broadcast()
+    }, sample * 1000)
+
+    const cwd = process.cwd()
+    const monPath = path.join(cwd, "public_mon")
+    if (!fs.existsSync(monPath)) {
+      fs.mkdirSync(monPath)
+      const zipPath = path.join(monPath, "out.zip");
+      const artifactUrl = "https://github.com/pryter/netcentric-monitoring-client/blob/main/out/artifact.zip?raw=true"
+      console.log("downloading artifact");
+      const res = await fetch(artifactUrl);
+      if (!res.ok) {
+        fs.rmdirSync(monPath)
+        throw new Error(`failed to download: ${res.statusText}`);
+      }
+      const buffer = await res.arrayBuffer();
+      fs.writeFileSync(zipPath, Buffer.from(buffer));
+      console.log("extracting artifact...");
+      const zip = new AdmZip(zipPath);
+      zip.extractAllTo(monPath, true);
+      console.log("extracted to:", monPath);
+    }
+
+    const serve = serveStatic(path.join(cwd, "monitoring"));
+
+    const server = http.createServer(function(req, res) {
+      const done = finalhandler(req, res);
+      serve(req, res, done);
+    });
+
+    console.log("Monitoring ui listening on port 8002 \nPlease open http://localhost:8002/")
+    server.listen(8002);
+
+  }
+
+  public startGameServer(port: number) {
+    this._pool.startListening(port)
+  }
+  protected _handleMessage(payload: MsgPayload, forwarder: ClientConnection | MonitorClientConnection) {
 
     if (!payload.isClientAction()) {
       return
     }
 
     switch (payload.getName()) {
+      case "sub-mon-stream":
+        if (forwarder instanceof MonitorClientConnection){
+          this._monitoringSubscriber[forwarder.getId()] = forwarder
+          forwarder.send(new MsgPayload({group: "server-response", name: "sub-mon-stream", status: 0}))
+        }else{
+          // not allow normal connection to subscribe to monitoring stream
+          forwarder.send(new MsgPayload({group: "server-response", name: "sub-mon-stream", status: 1}))
+        }
+        break
       case "set-nickname": {
         const sendError = () => {
           forwarder.send(new MsgPayload({group: "server-response", name: "set-nickname", status: 1}))
@@ -84,6 +157,47 @@ export class CoreGame {
           forwarder.send(new MsgPayload({group: "server-response", name: "start-example", status: 1}))
         }
         break
+      case "create-og-game":
+        // do some single player stuff
+        const room = new OriginalGameRoom()
+        this._roomRegistry[room.getId()] = room
+
+        room.setDestroyListener(() => {
+          delete this._roomRegistry[room.getId()]
+        })
+        // forwarder became player
+        const player = new Player(forwarder)
+        // add player to the room
+        room.addPlayer(player)
+
+        // pause match after player disconnects?
+        player.onDisconnect(() => {
+          room.pauseMatch({type: "p-dis", text: "owner disconnected"}, player)
+        })
+
+        // ready to confirm to user
+        forwarder.send(new MsgPayload({group: "server-response", name: "create-og-game",data:{roomId: room.getId()}, status: 0}))
+        break
+      case "join-og-game":
+        const id = payload.getMsgData().roomId
+        const groom = this._roomRegistry[id]
+        if (!groom) {
+          break
+        }
+
+        const p = new Player(forwarder)
+
+        const result = groom.addPlayer(p)
+        if (!result) {
+          forwarder.send(new MsgPayload({group: "server-response", name: "join-og-game", status: 1, data: "join-mid-game-error"}))
+          return;
+        }
+
+        p.onDisconnect(() => {
+          groom.pauseMatch({type: "p-dis", text: "player disconnected"}, p)
+        })
+
+        forwarder.send(new MsgPayload({group: "server-response", name: "join-og-game", status: 0}))
     }
   }
 }

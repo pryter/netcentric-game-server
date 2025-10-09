@@ -3,12 +3,15 @@
   "version": "0.0.0",
   "scripts": {
     "test-start": "ts-node src/test.ts",
-    "dev": "ts-node src/main.ts"
+    "dev": "ts-node src/main.ts",
+    "build": "bun build ./src/main.ts --compile --outfile ./dist/server-arm64"
   },
   "dependencies": {
+    "adm-zip": "^0.5.16",
     "cookie-parser": "~1.4.4",
     "debug": "~2.6.9",
     "dgram": "^1.0.1",
+    "extract-zip": "^2.0.1",
     "finalhandler": "^2.1.0",
     "firebase-admin": "^13.5.0",
     "http-errors": "~1.6.3",
@@ -22,10 +25,11 @@
   },
   "devDependencies": {
     "@babel/preset-typescript": "^7.27.1",
+    "@types/adm-zip": "^0.5.7",
     "@types/bun": "latest",
+    "@types/finalhandler": "^1.2.4",
     "@types/node": "^24.5.2",
     "@types/serve-static": "^1.15.9",
-    "@types/finalhandler": "^1.2.4",
     "@types/ws": "^8.18.1",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",

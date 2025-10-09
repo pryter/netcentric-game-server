@@ -3,8 +3,6 @@ import {MsgPayload, Payload, type PayloadMsgData} from "./Payload";
 import type {CoreGame, GlobalEventListener} from "./CoreGame";
 import {User} from "./User";
 export type ClientConnectionState = "guest" | "authenticated"
-import * as admin from "firebase-admin";
-import serviceAccount from "../../keys/fb-keys.json"
 import {getFirebaseApp} from "@lib/firebaseUtil";
 import {Database} from "@lib/Database";
 
@@ -18,6 +16,7 @@ export class ClientConnection {
   protected _globalMsgListeners: (payload: Payload, forwarder: ClientConnection) => void = () => {}
   protected _closeListener: () => void = () => {}
   private _user: User | undefined
+  protected TYPE = "default"
 
   private _lastActive: number = new Date().getTime()
 
@@ -94,6 +93,15 @@ export class ClientConnection {
     })
   }
 
+  public toObject() {
+    return {
+      id: this._id,
+      state: this._state,
+      user: this._user?.getCachedData(),
+      lastActive: this._lastActive,
+      type: this.TYPE
+    }
+  }
 
   protected async _handleUpgrade(payload: Payload<{token: string}>) {
     const data = payload.getData()
@@ -113,7 +121,6 @@ export class ClientConnection {
 
     let userd = Database.findUser(t.uid)
 
-
     if (!userd) {
       const nu = {
         uid: t.uid,
@@ -125,10 +132,7 @@ export class ClientConnection {
       Database.createUser(nu)
       userd = nu
     }
-    // some firebase action here
-    // get user from firebase
-    // set user to this connection
-    // upgrade to authenticated
+
     this._user = new User(userd.uid)
     this.upgradeToAuthenticated()
     this.send(new Payload("upgrade", {status: 0, userData: userd}))

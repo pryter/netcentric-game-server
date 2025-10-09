@@ -4,11 +4,13 @@ import {Database, UserData} from "@lib/Database";
 
 export class User {
   private _uid: string;
+  private _cachedData: UserData | null
 
   constructor(uid: string)
 
   constructor(...args: any[]) {
     this._uid = args[0]
+    this._cachedData = null
   }
 
   public getUid() {
@@ -26,6 +28,13 @@ export class User {
 
   public getUserData() {
     return this._fetchUserDatabase()
+  }
+
+  public getCachedData(): UserData | null {
+    if (!this._cachedData) {
+      return this.getUserData()
+    }
+    return this._cachedData
   }
 
   public updateNickname(nickname: string) {
@@ -48,6 +57,7 @@ export class User {
     db.read()
     const data = db.data.users.find(u => u.uid === this._uid)
     if (data) {
+      this._cachedData = data
       return data
     }
 

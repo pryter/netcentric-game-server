@@ -1,6 +1,7 @@
 import {JSONFilePreset, JSONFileSync} from "lowdb/node";
 import {LowSync} from "lowdb";
 import {User} from "@lib/User";
+import * as path from "node:path";
 
 export type UserData = {
   uid: string,
@@ -13,7 +14,8 @@ export type UserData = {
 export class Database {
 
   public static loadUserDatabase() {
-    return new LowSync<{users: UserData[]}>(new JSONFileSync("db/users.json"), { users: [] })
+    const cwd = process.cwd()
+    return new LowSync<{users: UserData[]}>(new JSONFileSync(path.join(cwd, "db/users.json")), { users: [] })
   }
 
   public static findUser(uid: string) {
@@ -23,7 +25,9 @@ export class Database {
   }
 
   public static createUser(userData: UserData): string {
-    Database.loadUserDatabase().update(db => {
+    const db = Database.loadUserDatabase()
+    db.read()
+    db.update(db => {
       db.users.push({
         ...userData
       })

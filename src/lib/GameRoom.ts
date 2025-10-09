@@ -9,6 +9,7 @@ export abstract class GameRoom {
   private readonly _id: string;
   private _tickInterval: NodeJS.Timeout
   protected readonly TICK_PER_SECOND = 10
+  private destroyListener: () => void = () => {}
 
 
   constructor() {
@@ -29,15 +30,26 @@ export abstract class GameRoom {
 
   public addPlayer(player: Player) {
     // auto bind player action listener
+    const r = this.onPlayerJoin(player)
+    if (!r) {
+      return false
+    }
+
     player.bindPlayerActionListener((type, data) => {
       this.onPlayerAction(player, type, data)
     })
 
-    this.onPlayerJoin(player)
+    return true
+
+  }
+
+  public setDestroyListener(l: () => void) {
+    this.destroyListener = l
   }
 
   public destroyRoom() {
     clearInterval(this._tickInterval)
+    this.destroyListener()
   }
 
   public runMatch() {
@@ -48,7 +60,7 @@ export abstract class GameRoom {
     this.onMatchPause(reason, player)
   }
 
-  protected abstract onPlayerJoin(player: Player): void
+  protected abstract onPlayerJoin(player: Player): boolean
 
   // Get triggered when player action is received except item use action which will be handled by the item itself
   protected abstract onRoomCreated(): void
@@ -57,4 +69,5 @@ export abstract class GameRoom {
   protected abstract onMatchResolve(): void
   protected abstract onServerTick(): void
   protected abstract onMatchPause(reason: MatchPauseReason, player: Player): void
+  public abstract getRoomData(): Record<string, any>
 }

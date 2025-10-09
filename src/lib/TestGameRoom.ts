@@ -22,6 +22,9 @@ export type TestRoomFrame = {
 
 
 export class TestGameRoom extends GameRoom {
+  public getRoomData(): Record<string, any> {
+      throw new Error("Method not implemented.");
+  }
   protected onRoomCreated(): void {
       return
   }
@@ -37,8 +40,9 @@ export class TestGameRoom extends GameRoom {
     state: "waiting"
   }
 
-  protected onPlayerJoin(player: Player): void {
+  protected onPlayerJoin(player: Player): boolean {
     this._p1 = player
+    return true
   }
 
 

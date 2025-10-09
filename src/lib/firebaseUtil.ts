@@ -1,14 +1,10 @@
 import * as admin from "firebase-admin";
-import serviceAccount from "../../keys/fb-keys.json";
-
+import {EmbeddedKeyManager} from "@lib/EmbeddedKeyManager";
 
 export const getFirebaseApp = () => {
   try {
-    const app = admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount as admin.ServiceAccount)
-    });
-    return app
+    return  admin.app()
   } catch (e) {
-    return admin.app()
+    throw e
   }
 }
