@@ -84,12 +84,20 @@ export class MsgPayload extends Payload<PayloadMsgData> {
   }
 }
 
-export class FramePayload extends Payload<FrameData> {
-  constructor(frame: FrameData) {
+export class FramePayload extends Payload<FrameData | "EOF" | "SOF"> {
+  constructor(frame: FrameData | "EOF" | "SOF") {
     super("frame", frame);
   }
 
   public getFrame() {
-    return this._data.frame
+    return this._data
+  }
+
+  public isEOFrame() {
+    return this._data === "EOF"
+  }
+
+  public isSOFrame() {
+    return this._data === "SOF"
   }
 }

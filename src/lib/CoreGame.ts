@@ -1,4 +1,4 @@
-import {MsgPayload, Payload, PayloadMsgData} from "./Payload";
+import {FramePayload, MsgPayload, Payload, PayloadMsgData} from "./Payload";
 import {ConnectionPool} from "./ConnectionPool";
 import {TestGameRoom} from "./TestGameRoom";
 import {ClientConnection} from "./ClientConnection";
@@ -12,6 +12,7 @@ import finalhandler from "finalhandler";
 import * as path from "node:path";
 import AdmZip from "adm-zip";
 import * as fs from "node:fs";
+import {IDPool} from "@lib/IDPool";
 
 export type GlobalEventListener = (payload: Payload, forwarder: ClientConnection) => void
 export class CoreGame {
@@ -72,7 +73,7 @@ export class CoreGame {
       console.log("extracted to:", monPath);
     }
 
-    const serve = serveStatic(path.join(cwd, "monitoring"));
+    const serve = serveStatic(monPath);
 
     const server = http.createServer(function(req, res) {
       const done = finalhandler(req, res);
@@ -163,6 +164,8 @@ export class CoreGame {
         this._roomRegistry[room.getId()] = room
 
         room.setDestroyListener(() => {
+          // free up code space and clear room registry
+          IDPool.getInstance().free(room.getId())
           delete this._roomRegistry[room.getId()]
         })
         // forwarder became player
@@ -170,32 +173,34 @@ export class CoreGame {
         // add player to the room
         room.addPlayer(player)
 
-        // pause match after player disconnects?
-        player.onDisconnect(() => {
-          room.pauseMatch({type: "p-dis", text: "owner disconnected"}, player)
-        })
+        const joinCode = IDPool.getInstance().getCode(room.getId())
 
         // ready to confirm to user
-        forwarder.send(new MsgPayload({group: "server-response", name: "create-og-game",data:{roomId: room.getId()}, status: 0}))
+        forwarder.send(new MsgPayload({group: "server-response", name: "create-og-game",data:{joinCode: joinCode}, status: 0}))
         break
       case "join-og-game":
-        const id = payload.getMsgData().roomId
+        const code = payload.getMsgData().code
+        console.log(code)
+        const id = IDPool.getInstance().findActualID(code)
+        if (!id) {
+          forwarder.send(new MsgPayload({group: "server-response", name: "join-og-game", status: 1}))
+          break
+        }
+
         const groom = this._roomRegistry[id]
         if (!groom) {
+          forwarder.send(new MsgPayload({group: "server-response", name: "join-og-game", status: 1}))
           break
         }
 
         const p = new Player(forwarder)
 
         const result = groom.addPlayer(p)
+
         if (!result) {
           forwarder.send(new MsgPayload({group: "server-response", name: "join-og-game", status: 1, data: "join-mid-game-error"}))
           return;
         }
-
-        p.onDisconnect(() => {
-          groom.pauseMatch({type: "p-dis", text: "player disconnected"}, p)
-        })
 
         forwarder.send(new MsgPayload({group: "server-response", name: "join-og-game", status: 0}))
     }

@@ -15,6 +15,7 @@ export class ClientConnection {
   protected _msgListeners: PayloadListener = () => {}
   protected _globalMsgListeners: (payload: Payload, forwarder: ClientConnection) => void = () => {}
   protected _closeListener: () => void = () => {}
+  protected _upgradeListener: (client: ClientConnection) => void = () => {}
   private _user: User | undefined
   protected TYPE = "default"
 
@@ -28,6 +29,7 @@ export class ClientConnection {
   }
 
   public upgradeToAuthenticated() {
+    this._upgradeListener(this)
     this._state = "authenticated";
   }
 
@@ -47,11 +49,18 @@ export class ClientConnection {
     this._msgListeners = cb
   }
 
+  public onConnectionUpgraded(listener: (client: ClientConnection) => void ) {
+    this._upgradeListener = listener
+  }
+
   public bindToGlobalListener(listener: GlobalEventListener) {
     this._globalMsgListeners = listener
   }
 
-  public close() {
+  public close(reason?: string) {
+    if (reason) {
+      this.send(new MsgPayload({group: "server-response", name: "close-connection", data: reason}))
+    }
     this._ws.close()
   }
 
@@ -72,6 +81,8 @@ export class ClientConnection {
   }
 
   public listenForClose(cb: () => void) {
+    // flush previous close listent
+    this._closeListener()
     this._closeListener = cb
   }
 

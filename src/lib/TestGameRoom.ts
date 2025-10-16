@@ -1,4 +1,4 @@
-import type {Player} from "./player/Player";
+import  {Player} from "./player/Player";
 import {GameRoom} from "./GameRoom";
 import {FramePayload, MsgPayload, Payload} from "./Payload";
 import {PlayerActionType} from "./player/PlayerActionType";
@@ -62,6 +62,10 @@ export class TestGameRoom extends GameRoom {
     this.destroyRoom()
   }
 
+  protected getAllPlayers(): Player[] {
+    return  !this._p1 ? [] : [this._p1]
+  }
+
   // tick will always tick no matter game logic is doing
   protected onServerTick() {
     // do something on tick your timer action should be here for consistency
@@ -123,6 +127,9 @@ export class TestGameRoom extends GameRoom {
 
   public getCurrentAnswer() {
     return this.currentQuestion
+  }
+
+  protected onPlayerLeave(player: Player) {
   }
 
 }

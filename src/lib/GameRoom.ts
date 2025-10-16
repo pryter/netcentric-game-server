@@ -1,6 +1,7 @@
 import {v4} from "uuid";
 import type {Player} from "./player/Player";
 import {PlayerActionType} from "./player/PlayerActionType";
+import {FramePayload, MsgPayload} from "@lib/Payload";
 
 export type MatchPauseReason = {type: string, text: string}
 
@@ -30,6 +31,12 @@ export abstract class GameRoom {
 
   public addPlayer(player: Player) {
     // auto bind player action listener
+    player.onDisconnect(() => {
+      this.onPlayerLeave(player)
+      this.pauseMatch({type: "p-dis", text: "owner disconnected"}, player)
+      player.sendPayload((new FramePayload("EOF")))
+    })
+
     const r = this.onPlayerJoin(player)
     if (!r) {
       return false
@@ -38,6 +45,8 @@ export abstract class GameRoom {
     player.bindPlayerActionListener((type, data) => {
       this.onPlayerAction(player, type, data)
     })
+
+    player.sendPayload(new FramePayload("SOF"))
 
     return true
 
@@ -49,6 +58,7 @@ export abstract class GameRoom {
 
   public destroyRoom() {
     clearInterval(this._tickInterval)
+    this.broadcastPayload(new FramePayload("EOF"))
     this.destroyListener()
   }
 
@@ -60,14 +70,22 @@ export abstract class GameRoom {
     this.onMatchPause(reason, player)
   }
 
+  public broadcastPayload(payload: MsgPayload | FramePayload) {
+    for (const p of this.getAllPlayers()){
+      p.sendPayload(payload)
+    }
+  }
+
   protected abstract onPlayerJoin(player: Player): boolean
 
   // Get triggered when player action is received except item use action which will be handled by the item itself
   protected abstract onRoomCreated(): void
   protected abstract onPlayerAction(player: Player, type: PlayerActionType, data: any): void
+  protected abstract onPlayerLeave(player: Player): void
   protected abstract onGameStart(): void
   protected abstract onMatchResolve(): void
   protected abstract onServerTick(): void
   protected abstract onMatchPause(reason: MatchPauseReason, player: Player): void
+  protected abstract getAllPlayers(): Player[]
   public abstract getRoomData(): Record<string, any>
 }

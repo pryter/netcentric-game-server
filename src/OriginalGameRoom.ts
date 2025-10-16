@@ -1,22 +1,8 @@
 import { GameRoom, MatchPauseReason } from "@lib/GameRoom";
 import { Player } from "@lib/player/Player";
 import { PlayerActionType } from "@lib/player/PlayerActionType";
-import { FramePayload } from "@lib/Payload";
-
-/**
- * IQ180 (Use all 5 digits once with + - * /)
- * Final rules implemented:
- *  - Digits are 1..9, exactly five numbers per round; each must be used exactly once.
- *  - We ONLY accept NUMBER expressions (no indices).
- *  - We parse and EVALUATE directly from the submitted string, left-to-right
- *    (no precedence), enforcing constraints at every step:
- *      * subtraction never goes negative
- *      * division only when exactly divisible
- *      * all intermediates and the final result are non-negative integers
- *  - Target is an integer <= 99 (two digits max). Generator retries to satisfy this; fallback is sum.
- *  - Scoring: only the FASTEST correct solver in the round gets points.
- *  - The question string shows a debug, numbers-based solution that is guaranteed correct.
- */
+import {FramePayload, MsgPayload} from "@lib/Payload";
+import {clearTimeout} from "node:timers";
 
 type RoomState =
   | "waiting"
@@ -27,6 +13,7 @@ type RoomState =
 
 type PlayerData = {
   isReady: boolean;
+  roundStatus: "thinking" | "solved"
   isDisconnected: boolean;
   displayName: string;
   id: string;
@@ -64,7 +51,7 @@ export class OriginalGameRoom extends GameRoom {
 
   private readonly _TOTAL_ROUNDS = 3;
   private readonly _ROUND_SECONDS = 60;
-  private readonly _BREAK_SECONDS = 3;
+  private readonly _BREAK_SECONDS = 6;
   private readonly _LOBBY_COUNTDOWN_SECONDS = 3; // NEW: lobby countdown length
   private readonly _POINTS_WIN = 1; // fastest correct only
 
@@ -81,6 +68,8 @@ export class OriginalGameRoom extends GameRoom {
 
   // action to perform after lobby countdown finishes
   private _pendingStartAction: "resume" | "start-new" | null = null;
+
+  private _roomDestroyTimeout: NodeJS.Timeout | null = null;
 
   // ---------------- lifecycle ----------------
   protected onRoomCreated(): void {}
@@ -115,7 +104,10 @@ export class OriginalGameRoom extends GameRoom {
 
       const alive = Object.values(this._playerDataRecord).find((d) => !d.isDisconnected)
       if (!alive) {
-        this.destroyRoom()
+        this._roomDestroyTimeout = setTimeout(() => {
+          console.log("cleared")
+          this.destroyRoom()
+        }, 10*1000)
       }
     }
     // this._frame.state = "waiting";
@@ -139,6 +131,10 @@ export class OriginalGameRoom extends GameRoom {
 
     const uid = player.getUid();
     this._playerRecord[uid] = player;
+    if (this._roomDestroyTimeout) {
+      clearTimeout(this._roomDestroyTimeout)
+    }
+
     if (uid in this._playerDataRecord) {
       // if already exist just use the same info
       // @ts-ignore
@@ -153,6 +149,7 @@ export class OriginalGameRoom extends GameRoom {
 
     this._playerDataRecord[uid] = {
       isReady: false,
+      roundStatus: "thinking",
       displayName: player.getNickname() ?? "unknown raccoon",
       id: uid,
       isDisconnected: false,
@@ -165,10 +162,24 @@ export class OriginalGameRoom extends GameRoom {
   protected onPlayerLeave(player: Player): void {
     const uid = player.getUid();
     delete this._playerRecord[uid];
-    delete this._playerDataRecord[uid];
-    this._winnersThisRound.delete(uid);
-    delete this._solveTimeMsByUid[uid];
-    // If someone leaves during lobby countdown, abort the countdown.
+
+    setTimeout(() => {
+      if (uid in this._playerRecord) {
+        return
+      }
+
+      // actually delete the player
+      delete this._playerDataRecord[uid];
+      this.getAllPlayers().forEach(player => {
+        const data = this._playerDataRecord[player.getUid()]
+        if (!data) {
+          return
+        }
+
+        data.isReady = false;
+      })
+    }, 10 * 1000)
+
     this._abortLobbyCountdownIfNeeded();
   }
 
@@ -205,17 +216,7 @@ export class OriginalGameRoom extends GameRoom {
     const pid = player.getUid();
 
     if (type === PlayerActionType.READY) {
-      // Robust handling: explicit true/false, strings like "cancel", or default TOGGLE on undefined.
-      let mode: "setTrue" | "setFalse" | "toggle" = "toggle";
-      if (typeof data === "boolean") mode = data ? "setTrue" : "setFalse";
-      else if (typeof data === "string" && /cancel|unready|false/i.test(data)) mode = "setFalse";
-      else if (data && typeof data.ready === "boolean") mode = data.ready ? "setTrue" : "setFalse";
-      else if (data && data.toggle === true) mode = "toggle";
-      else if (data && typeof data.action === "string" && /cancel|unready|false/i.test(data.action)) mode = "setFalse";
-
-      const current = this._playerDataRecord[pid]?.isReady ?? false;
-      if (mode === "toggle") this._setReady(pid, !current);
-      else this._setReady(pid, mode === "setTrue");
+      this._setReady(pid, data);
 
       // If someone cancelled during lobby countdown, abort it.
       this._abortLobbyCountdownIfNeeded();
@@ -223,22 +224,19 @@ export class OriginalGameRoom extends GameRoom {
       if (this._frame.state === "waiting") this._maybeStartIfAllReady();
       return;
     }
-    // explicit cancel ready also supported via a separate enum value if present
-    // @ts-ignore in case enum doesn't declare it
-    if ((PlayerActionType as any).CANCEL_READY !== undefined && type === (PlayerActionType as any).CANCEL_READY) {
-      this._setReady(pid, false);
-      this._abortLobbyCountdownIfNeeded();
-      return;
-    }
 
     if (type === PlayerActionType.SUBMIT) {
       if (this._frame.state !== "running") return;
 
-      const s = this._extractNumbersExpression(data);
+      const replaced = data.replace(/×/g, "*").replace(/÷/g, "/")
+      const s = this._extractNumbersExpression(replaced);
+      console.log(s)
       if (!s) return; // only accept numbers-expr
+
 
       const parsed = this._parseExprStringNumbersStrict(s, this._digits.length);
       if (!parsed) return;
+      console.log(parsed)
       const { nums, ops } = parsed;
 
       if (!this._sameMultiset(nums, this._digits)) return; // must use exactly the digits
@@ -247,6 +245,10 @@ export class OriginalGameRoom extends GameRoom {
       if (val == null) return;
       const correct = val === this._target;
       if (!correct) return;
+
+      //correct
+      // @ts-ignore
+      this._playerDataRecord[pid].roundStatus = "solved"
 
       if (!this._winnersThisRound.has(pid)) {
         this._winnersThisRound.add(pid);
@@ -315,10 +317,11 @@ export class OriginalGameRoom extends GameRoom {
       playersCopy[uid] = { ...v };
     }
     const filled: RoomFrame = { ...this._frame, players: playersCopy };
-    for (const p of Object.values(this._playerRecord)) {
-      if (!p) continue;
-      p.sendPayload(new FramePayload(filled));
-    }
+    this.broadcastPayload(new FramePayload(filled))
+  }
+
+  protected getAllPlayers(): Player[] {
+    return Object.values(this._playerRecord)
   }
 
   public getRoomData(): Record<string, any> {
@@ -352,11 +355,18 @@ export class OriginalGameRoom extends GameRoom {
     this._frame.breakTimer = 0;
 
     this._winnersThisRound.clear();
+
+    // reset
+    Object.values(this._playerDataRecord).forEach((d) => {
+      d.roundStatus = "thinking"
+    })
+
     this._solveTimeMsByUid = {};
     this._frame.winner = null;
     this._remainingRoundMs = null;
 
     this._frame.question = {problem: this._digits, target: this._target}
+    console.log(`Generated possible answer = ${made.numbersExpr}`)
     this._frame.state = "running";
   }
 

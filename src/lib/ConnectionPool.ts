@@ -35,6 +35,10 @@ export class ConnectionPool {
 
     this._table[id] = cc
 
+    cc.onConnectionUpgraded((c) => {
+      this.clearDuplicated(c)
+    })
+
     cc.bindToGlobalListener(this._globalListener)
     cc.startForwarding()
 
@@ -92,6 +96,18 @@ export class ConnectionPool {
     } catch (e) {
       throw new Error("could not start listening")
     }
+  }
+
+  public clearDuplicated(c: ClientConnection) {
+    const uid = c.getUser()?.getUid()
+    const exSid = c.getId()
+    Object.values(this._table).forEach((cc) => {
+      const id = cc.getUser()?.getUid()
+      if (!id) return
+      if (id == uid && cc.getId() !== exSid) {
+        cc.close("duplicated-connection")
+      }
+    })
   }
 
   public tableToObject() {
