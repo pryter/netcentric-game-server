@@ -99,8 +99,10 @@ export class OriginalGameRoom extends GameRoom {
     // Game should not pause tho
 
     if (reason.type === "p-dis") {
-      // @ts-ignore
-      this._playerDataRecord[player.getUid()].isDisconnected = true;
+      const pdata = this._playerDataRecord[player.getUid()]
+      if (pdata) {
+        pdata.isDisconnected = true;
+      }
 
       const alive = Object.values(this._playerDataRecord).find((d) => !d.isDisconnected)
       if (!alive) {
@@ -163,6 +165,7 @@ export class OriginalGameRoom extends GameRoom {
     const uid = player.getUid();
     delete this._playerRecord[uid];
 
+    const kickPeriod = this._frame.state === "waiting" ? 10 * 1000 : 60 * 1000
     setTimeout(() => {
       if (uid in this._playerRecord) {
         return
@@ -170,15 +173,17 @@ export class OriginalGameRoom extends GameRoom {
 
       // actually delete the player
       delete this._playerDataRecord[uid];
-      this.getAllPlayers().forEach(player => {
-        const data = this._playerDataRecord[player.getUid()]
-        if (!data) {
-          return
-        }
+      if (this._frame.state === "waiting") {
+        this.getAllPlayers().forEach(player => {
+          const data = this._playerDataRecord[player.getUid()]
+          if (!data) {
+            return
+          }
 
-        data.isReady = false;
-      })
-    }, 10 * 1000)
+          data.isReady = false;
+        })
+      }
+    }, kickPeriod)
 
     this._abortLobbyCountdownIfNeeded();
   }
