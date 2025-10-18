@@ -5,6 +5,7 @@ import {User} from "./User";
 export type ClientConnectionState = "guest" | "authenticated"
 import {getFirebaseApp} from "@lib/firebaseUtil";
 import {Database} from "@lib/Database";
+import {Logger} from "@lib/logger/Logger";
 
 export type PayloadListener = (payload: MsgPayload, forwarder: ClientConnection) => void
 export class ClientConnection {
@@ -153,7 +154,7 @@ export class ClientConnection {
     const messagePayload = new Payload(data.toString())
 
     if (messagePayload.getType() === "upgrade" && this._state === "authenticated") {
-      console.log("dropping payload; payload type upgrade should not be sent after authentication")
+      Logger.warn("dropping payload; payload type upgrade should not be sent after authentication")
       return;
     }
     if (messagePayload.getType() === "upgrade") {
@@ -166,7 +167,7 @@ export class ClientConnection {
     }
 
     if (messagePayload.getType() === "frame" || messagePayload.getType() === "ping") {
-      console.log("dropping payload; payload type frame and ping should not be sent to the server")
+      Logger.warn("dropping payload; payload type frame and ping should not be sent to the server")
       return
     }
 

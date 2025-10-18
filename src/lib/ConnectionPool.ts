@@ -5,6 +5,8 @@ import {Payload} from "./Payload";
 
 import type {CoreGame, GlobalEventListener} from "./CoreGame";
 import {MonitorClientConnection} from "@lib/monitoring/MonitorClientConnection";
+import chalk from "chalk";
+import {Logger} from "@lib/logger/Logger";
 
 type ConnectionRecord = Record<string, ClientConnection>
 
@@ -61,7 +63,7 @@ export class ConnectionPool {
     cc.onClose(() => {
       delete this._table[id]
       clearInterval(ping_t)
-      console.log(`closed ${id}`)
+      Logger.info(`closed #${id}`)
     })
   }
 
@@ -91,8 +93,8 @@ export class ConnectionPool {
       wss.on("connection", (ws, req) => {
         this.onConnection(ws, req.url ?? "")
       })
-      console.log("server started on", `0.0.0.0:${port}`)
-      console.log("note: monitoring client started on path /monitoring")
+      console.log(chalk.bold("\nserver started on", `0.0.0.0:${port}`))
+      console.log(chalk.gray.italic("note: monitoring client started on path /monitoring"))
     } catch (e) {
       throw new Error("could not start listening")
     }

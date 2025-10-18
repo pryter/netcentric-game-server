@@ -1,6 +1,7 @@
 import path from "node:path";
 import fs from "node:fs";
 import AdmZip from "adm-zip";
+import chalk from "chalk";
 
 export class AssetsLoader {
 
@@ -9,11 +10,12 @@ export class AssetsLoader {
     const monPath = path.join(cwd, "public_mon")
 
     if (!fs.existsSync(monPath)) {
+      console.log(chalk.gray("\nDownloading monitoring ui"));
       fs.mkdirSync(monPath)
       const zipPath = path.join(monPath, "out.zip");
       const artifactUrl = "https://github.com/pryter/netcentric-monitoring-client/blob/main/out/artifact.zip?raw=true"
 
-      console.log("downloading artifact");
+      console.log(chalk.gray("downloading artifact..."));
       const res = await fetch(artifactUrl);
       if (!res.ok) {
         fs.rmdirSync(monPath)
@@ -23,11 +25,11 @@ export class AssetsLoader {
       const buffer = await res.arrayBuffer();
       fs.writeFileSync(zipPath, Buffer.from(buffer));
 
-      console.log("extracting artifact...");
+      console.log(chalk.gray("extracting the artifact..."));
       const zip = new AdmZip(zipPath);
       zip.extractAllTo(monPath, true);
 
-      console.log("extracted to:", monPath);
+      console.log(chalk.gray("extracted to:", monPath, "\n"));
     }
 
     return monPath

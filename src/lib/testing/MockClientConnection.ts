@@ -3,6 +3,7 @@ import * as websocket from "ws";
 import {MsgPayload, Payload} from "@lib/Payload";
 import type {GlobalEventListener} from "@lib/CoreGame";
 import {User} from "@lib/User";
+import {Logger} from "@lib/logger/Logger";
 
 export class MockClientConnection extends ClientConnection {
 
@@ -51,7 +52,7 @@ export class MockClientConnection extends ClientConnection {
     const messagePayload = data
 
     if (messagePayload.getType() === "frame" || messagePayload.getType() === "ping") {
-      console.log("dropping payload; payload type frame and ping should not be sent to the server")
+      Logger.warn("dropping payload; payload type frame and ping should not be sent to the server")
       return
     }
 
