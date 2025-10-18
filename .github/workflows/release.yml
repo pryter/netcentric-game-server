@@ -14,23 +14,28 @@ jobs:
           - os: ubuntu-latest
             platform: linux
             arch: x64
-            artifact_name: wsserver-linux-x64
+            binary_name: wsserver
+            archive_name: wsserver-linux-x64.tar.gz
           - os: ubuntu-latest
             platform: linux
             arch: arm64
-            artifact_name: wsserver-linux-arm64
+            binary_name: wsserver
+            archive_name: wsserver-linux-arm64.tar.gz
           - os: macos-latest
             platform: darwin
             arch: x64
-            artifact_name: wsserver-macos-x64
+            binary_name: wsserver
+            archive_name: wsserver-macos-x64.tar.gz
           - os: macos-latest
             platform: darwin
             arch: arm64
-            artifact_name: wsserver-macos-arm64
+            binary_name: wsserver
+            archive_name: wsserver-macos-arm64.tar.gz
           - os: windows-latest
             platform: windows
             arch: x64
-            artifact_name: wsserver-windows-x64.exe
+            binary_name: wsserver.exe
+            archive_name: wsserver-windows-x64.zip
 
     steps:
       - name: Checkout code
@@ -46,14 +51,39 @@ jobs:
 
       - name: Build binary
         run: |
-          bun build src/main.ts --compile --target=bun-${{ matrix.platform }}-${{ matrix.arch }} --outfile ${{ matrix.artifact_name }}
+          bun build src/main.ts --compile --target=bun-${{ matrix.platform }}-${{ matrix.arch }} --outfile ${{ matrix.binary_name }}
 
-      - name: Upload binary to release
+      - name: Create archive (Linux/macOS)
+        if: matrix.platform != 'windows'
+        run: |
+          chmod +x ${{ matrix.binary_name }}
+          tar -czf ${{ matrix.archive_name }} ${{ matrix.binary_name }}
+          md5sum ${{ matrix.archive_name }} > ${{ matrix.archive_name }}.md5
+
+      - name: Create archive (Windows)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path ${{ matrix.binary_name }} -DestinationPath ${{ matrix.archive_name }}
+          $hash = Get-FileHash -Path ${{ matrix.archive_name }} -Algorithm MD5
+          "$($hash.Hash.ToLower())  ${{ matrix.archive_name }}" | Out-File -Encoding ASCII ${{ matrix.archive_name }}.md5
+
+      - name: Upload archive to release
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ./${{ matrix.artifact_name }}
-          asset_name: ${{ matrix.artifact_name }}
-          asset_content_type: application/octet-stream
+          asset_path: ./${{ matrix.archive_name }}
+          asset_name: ${{ matrix.archive_name }}
+          asset_content_type: application/gzip
+
+      - name: Upload MD5 checksum to release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ./${{ matrix.archive_name }}.md5
+          asset_name: ${{ matrix.archive_name }}.md5
+          asset_content_type: text/plain
