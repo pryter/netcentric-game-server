@@ -1,7 +1,7 @@
-import  {Player} from "./player/Player";
-import {GameRoom} from "./GameRoom";
-import {FramePayload, MsgPayload, Payload} from "./Payload";
-import {PlayerActionType} from "./player/PlayerActionType";
+import  {Player} from "@lib/player/Player";
+import {GameRoom} from "@lib/GameRoom";
+import {FramePayload, MsgPayload, Payload} from "@lib/Payload";
+import {PlayerActionType} from "@lib/player/PlayerActionType";
 
 // Modify this to your needs
 // the frame should describe the current state of the game what user sees

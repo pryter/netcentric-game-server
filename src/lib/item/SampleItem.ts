@@ -1,7 +1,7 @@
 import { GameRoom } from "../GameRoom";
 import { Player } from "../player/Player";
 import {Item} from "./Item";
-import {TestGameRoom} from "../TestGameRoom";
+import {TestGameRoom} from "@lib/testing/TestGameRoom";
 import {MsgPayload} from "../Payload";
 
 export class SampleItem extends Item<TestGameRoom> {

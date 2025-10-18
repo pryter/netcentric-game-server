@@ -29,6 +29,10 @@ readline.question('Embedded key password:', pass => {
   })
 });
 
+readline.on("SIGINT",() => {
+  process.exit(0);
+})
+
 readline.on('close', () => {
   const cwd = process.cwd()
   const dbExists = fs.existsSync(path.join(cwd, "db/"))

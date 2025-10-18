@@ -1,18 +1,15 @@
 import {FramePayload, MsgPayload, Payload, PayloadMsgData} from "./Payload";
 import {ConnectionPool} from "./ConnectionPool";
-import {TestGameRoom} from "./TestGameRoom";
 import {ClientConnection} from "./ClientConnection";
 import {Player} from "./player/Player";
 import {GameRoom} from "./GameRoom";
 import {OriginalGameRoom} from "../OriginalGameRoom";
-import {MonitorClientConnection} from "@lib/MonitorClientConnection";
+import {MonitorClientConnection} from "@lib/monitoring/MonitorClientConnection";
 import serveStatic from "serve-static";
 import http from "node:http";
 import finalhandler from "finalhandler";
-import * as path from "node:path";
-import AdmZip from "adm-zip";
-import * as fs from "node:fs";
 import {IDPool} from "@lib/IDPool";
+import {AssetsLoader} from "@lib/monitoring/AssetsLoader";
 
 export type GlobalEventListener = (payload: Payload, forwarder: ClientConnection) => void
 export class CoreGame {
@@ -53,27 +50,9 @@ export class CoreGame {
       this.broadcast()
     }, sample * 1000)
 
-    const cwd = process.cwd()
-    const monPath = path.join(cwd, "public_mon")
-    if (!fs.existsSync(monPath)) {
-      fs.mkdirSync(monPath)
-      const zipPath = path.join(monPath, "out.zip");
-      const artifactUrl = "https://github.com/pryter/netcentric-monitoring-client/blob/main/out/artifact.zip?raw=true"
-      console.log("downloading artifact");
-      const res = await fetch(artifactUrl);
-      if (!res.ok) {
-        fs.rmdirSync(monPath)
-        throw new Error(`failed to download: ${res.statusText}`);
-      }
-      const buffer = await res.arrayBuffer();
-      fs.writeFileSync(zipPath, Buffer.from(buffer));
-      console.log("extracting artifact...");
-      const zip = new AdmZip(zipPath);
-      zip.extractAllTo(monPath, true);
-      console.log("extracted to:", monPath);
-    }
+    const path = await AssetsLoader.loadMonitoringUI()
 
-    const serve = serveStatic(monPath);
+    const serve = serveStatic(path);
 
     const server = http.createServer(function(req, res) {
       const done = finalhandler(req, res);
@@ -88,6 +67,7 @@ export class CoreGame {
   public startGameServer(port: number) {
     this._pool.startListening(port)
   }
+
   protected _handleMessage(payload: MsgPayload, forwarder: ClientConnection | MonitorClientConnection) {
 
     if (!payload.isClientAction()) {
@@ -137,27 +117,6 @@ export class CoreGame {
         forwarder.send(new MsgPayload({group: "server-response", name: "get-user", status: 0}))
         forwarder.send(new MsgPayload({group: "credential", name: "server-user", data: user.getUserData(), status: 0}))
       }
-      case "start-example":
-        try {
-          // do some single player stuff
-          const room = new TestGameRoom()
-          // forwarder became player
-          const player = new Player(forwarder)
-          // add player to the room
-          room.addPlayer(player)
-
-          // pause match after player disconnects?
-          player.onDisconnect(() => {
-            room.pauseMatch({type: "p-dis", text: "player disconnected"}, player)
-          })
-
-          // ready to confirm to user
-          forwarder.send(new MsgPayload({group: "server-response", name: "start-example", status: 0}))
-          room.runMatch()
-        } catch (e) {
-          forwarder.send(new MsgPayload({group: "server-response", name: "start-example", status: 1}))
-        }
-        break
       case "create-og-game":
         // do some single player stuff
         const room = new OriginalGameRoom()

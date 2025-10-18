@@ -125,7 +125,9 @@ export class OriginalGameRoom extends GameRoom {
     this._solveTimeMsByUid = {};
     this._remainingRoundMs = null;
     this._pendingStartAction = null;
-    this.destroyRoom()
+    setTimeout(() => {
+      this.destroyRoom()
+    }, 1000)
   }
 
   // ---------------- players ----------------

@@ -1,8 +1,8 @@
-import {ClientConnection} from "./ClientConnection";
+import {ClientConnection} from "@lib/ClientConnection";
 import * as websocket from "ws";
-import {MsgPayload, Payload} from "./Payload";
-import type {GlobalEventListener} from "./CoreGame";
-import {User} from "./User";
+import {MsgPayload, Payload} from "@lib/Payload";
+import type {GlobalEventListener} from "@lib/CoreGame";
+import {User} from "@lib/User";
 
 export class MockClientConnection extends ClientConnection {
 

@@ -3,7 +3,6 @@ export class IDPool {
 
   private static _instance:IDPool = new IDPool();
   private _pool: Record<string, string> = {}
-  private PROHIBITED_PAIRS: string[][] = [["0","O"], ["I", "1"]]
 
   constructor() {
     if(IDPool._instance){
@@ -18,17 +17,12 @@ export class IDPool {
   }
 
   private _randomID() {
-    const charList = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    const charList = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
     let eligibleList = charList
     let result = '';
     for (let i = 4; i > 0; --i) {
       const char = eligibleList[Math.floor(Math.random() * eligibleList.length)]
       result += char
-      const s = this.PROHIBITED_PAIRS.find((a) => a.includes(char as string))
-      if (s) {
-        const toRemove = s.find(a => a !== char as string)
-        eligibleList = eligibleList.replace(toRemove as string, "")
-      }
     }
     return result;
   }

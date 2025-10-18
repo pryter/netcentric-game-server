@@ -4,7 +4,7 @@ import {ClientConnection} from "./ClientConnection";
 import {Payload} from "./Payload";
 
 import type {CoreGame, GlobalEventListener} from "./CoreGame";
-import {MonitorClientConnection} from "@lib/MonitorClientConnection";
+import {MonitorClientConnection} from "@lib/monitoring/MonitorClientConnection";
 
 type ConnectionRecord = Record<string, ClientConnection>
 
