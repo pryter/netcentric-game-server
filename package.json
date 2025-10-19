@@ -12,6 +12,7 @@
     "cookie-parser": "~1.4.4",
     "debug": "~2.6.9",
     "dgram": "^1.0.1",
+    "dotenv": "^17.2.3",
     "extract-zip": "^2.0.1",
     "finalhandler": "^2.1.0",
     "firebase-admin": "^13.5.0",
