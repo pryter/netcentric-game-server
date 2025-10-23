@@ -1,27 +1,22 @@
-import type {ClientConnection} from "../ClientConnection";
-import {User} from "../User";
-import {FramePayload, MsgPayload} from "../Payload";
-import {PlayerActionType} from "./PlayerActionType";
-import {Item} from "../item/Item";
-import {Inventory} from "../item/Inventory";
-import {SampleItem} from "../item/SampleItem";
-import {GameRoom} from "../GameRoom";
+import {Player} from "@lib/player/Player";
+import type {ClientConnection} from "@lib/ClientConnection";
+import {TestUser} from "./TestUser";
+import { GameRoom } from "@lib/GameRoom";
+import { Inventory } from "@lib/item/Inventory";
+import { Item } from "@lib/item/Item";
+import { MsgPayload, FramePayload } from "@lib/Payload";
+import { PlayerActionType } from "@lib/player/PlayerActionType";
+import {SampleItem} from "@lib/item/SampleItem";
 
-export class Player extends User {
-
-  private _connection: ClientConnection;
-  private _isReady: boolean = false
-  private _playerActionListener: (type: PlayerActionType, data: any) => void = () => {}
-  private _inventory: Inventory<Item<GameRoom>>
-
-
+export class TestPlayer extends TestUser {
   constructor(connection: ClientConnection) {
+
+    super("test-client", connection.getUser()?.getUid() as string)
     if (!connection.isAuthenticated() || !connection.getUser()) {
       // not authenticated should not be able to be player
       throw new Error("not authenticated connection cant be cast to player")
     }
-    
-    super(connection.getUser()?.getUid() as string)
+
     this._connection = connection
 
     this._inventory = new Inventory()
@@ -45,6 +40,11 @@ export class Player extends User {
       }
     })
   }
+
+  private _connection: ClientConnection;
+  private _isReady: boolean = false
+  private _playerActionListener: (type: PlayerActionType, data: any) => void = () => {}
+  private _inventory: Inventory<Item<GameRoom>>
 
   public isSamePlayer(player: Player) {
     return this.getUid() === player.getUid()
@@ -97,6 +97,4 @@ export class Player extends User {
 
     this._inventory.add(new SampleItem(), 1)
   }
-
-
 }

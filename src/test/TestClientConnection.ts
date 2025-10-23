@@ -1,6 +1,7 @@
 import {ClientConnection} from "@lib/ClientConnection";
 import {MsgPayload, Payload} from "@lib/Payload";
 import {User} from "@lib/User";
+import {TestUser} from "./TestUser";
 
 export class TestClientConnection extends ClientConnection{
 
@@ -10,7 +11,7 @@ export class TestClientConnection extends ClientConnection{
 
     // skip authentication for now
 
-    const user = new User(data.id)
+    const user = new TestUser(data.name, data.id)
     this.setUser(user)
     this.upgradeToAuthenticated()
     this.send(new MsgPayload({group: "upgrade", name: "upgrade-success"}))

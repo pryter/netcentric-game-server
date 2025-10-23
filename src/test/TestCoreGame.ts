@@ -3,6 +3,8 @@ import {ClientConnection} from "@lib/ClientConnection";
 import {Player} from "@lib/player/Player";
 import {CoreGame} from "@lib/CoreGame";
 import {OriginalGameRoom} from "../OriginalGameRoom";
+import {TestPlayer} from "./TestPlayer";
+import {IDPool} from "@lib/IDPool";
 
 export class TestCoreGame extends CoreGame {
 
@@ -18,15 +20,16 @@ export class TestCoreGame extends CoreGame {
         // do some single player stuff
         const room = new OriginalGameRoom()
         this._roomRegistry[room.getId()] = room
+
+        room.setDestroyListener(() => {
+          // free up code space and clear room registry
+          IDPool.getInstance().free(room.getId())
+          delete this._roomRegistry[room.getId()]
+        })
         // forwarder became player
-        const player = new Player(forwarder)
+        const player = new TestPlayer(forwarder) as unknown as Player
         // add player to the room
         room.addPlayer(player)
-
-        // pause match after player disconnects?
-        player.onDisconnect(() => {
-          room.pauseMatch({type: "p-dis", text: "player disconnected"}, player)
-        })
 
         // ready to confirm to user
         forwarder.send(new MsgPayload({group: "server-response", name: "start-test-suite",data:{roomId: room.getId()}, status: 0}))
@@ -39,7 +42,7 @@ export class TestCoreGame extends CoreGame {
           break
         }
 
-        const p = new Player(forwarder)
+        const p = new TestPlayer(forwarder) as unknown as Player
         p.onDisconnect(() => {
           groom.pauseMatch({type: "p-dis", text: "player disconnected"}, p)
         })
