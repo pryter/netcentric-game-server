@@ -11,7 +11,7 @@ export class Player extends User {
 
   private _connection: ClientConnection;
   private _isReady: boolean = false
-  private _playerActionListener: (type: PlayerActionType, data: any) => void = () => {}
+  private _playerActionListener: (type: PlayerActionType, data: any) => boolean = () => false
   private _inventory: Inventory<Item<GameRoom>>
 
 
@@ -34,10 +34,10 @@ export class Player extends User {
 
       switch (cb.getName()) {
         case "ready":
-          this._setReady(cb.getMsgData())
+          this._setReady(cb)
           break
         case "submit":
-          this._submitAnswer(cb.getMsgData())
+          this._submitAnswer(cb)
           break
         case "use-item":
           // TODO: implement use item
@@ -63,19 +63,25 @@ export class Player extends User {
     this._connection.listenForClose(cb)
   }
 
-  public bindPlayerActionListener(cb: (type: PlayerActionType, data: any) => void) {
+  public bindPlayerActionListener(cb: (type: PlayerActionType, data: any) => boolean) {
     this._playerActionListener = cb
   }
 
   // Implementations
-  private _submitAnswer(answer: string): boolean {
-    this._playerActionListener(PlayerActionType.SUBMIT, answer)
-    return true
+  private _submitAnswer(payload: MsgPayload): boolean {
+    const actionResult = this._playerActionListener(PlayerActionType.SUBMIT, payload.getMsgData())
+
+    if (actionResult) {
+      this._connection.send(payload.createResponse(0))
+    }else{
+      this._connection.send(payload.createResponse(1))
+    }
+    return actionResult
   }
 
-  private _setReady(status: boolean): boolean {
-    this._playerActionListener(PlayerActionType.READY, status)
-    return true
+  private _setReady(payload: MsgPayload): boolean {
+    const actionResult = this._playerActionListener(PlayerActionType.READY, payload.getMsgData())
+    return actionResult
   }
 
   // basically pass item to room for execution
@@ -86,7 +92,7 @@ export class Player extends User {
 
     // please change this
     const item = new SampleItem()
-    this._playerActionListener(PlayerActionType.USE_ITEM, {item: item, amount: amount})
+    // this._playerActionListener(PlayerActionType.USE_ITEM, {item: item, amount: amount})
     return true
   }
 

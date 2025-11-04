@@ -36,4 +36,4 @@ yarn run test-start
 ```
 
 ### Important
-Please edit only the **OriginalGameRoom.ts**
+Please edit only the **ClassicGameRoom.ts**

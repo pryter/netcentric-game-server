@@ -3,13 +3,15 @@ import {ConnectionPool} from "./ConnectionPool";
 import {ClientConnection} from "./ClientConnection";
 import {Player} from "./player/Player";
 import {GameRoom} from "./GameRoom";
-import {OriginalGameRoom} from "../OriginalGameRoom";
 import {MonitorClientConnection} from "@lib/monitoring/MonitorClientConnection";
 import serveStatic from "serve-static";
 import http from "node:http";
 import finalhandler from "finalhandler";
 import {IDPool} from "@lib/IDPool";
 import {AssetsLoader} from "@lib/monitoring/AssetsLoader";
+import {CompetitiveGameRoom} from "@lib/room/CompetitiveGameRoom";
+import {Database} from "@lib/Database";
+import {ClassicGameRoom} from "@lib/room/ClassicGameRoom";
 
 export type GlobalEventListener = (payload: Payload, forwarder: ClientConnection) => void
 export class CoreGame {
@@ -27,7 +29,7 @@ export class CoreGame {
   public globalListener = (payload: Payload, forwarder: ClientConnection)=>  {
     switch (payload.getType()) {
     case "message":
-      this._handleMessage(new MsgPayload(payload.getData()), forwarder)
+      this._handleMessage(payload as MsgPayload, forwarder)
       break
     }
   }
@@ -75,18 +77,24 @@ export class CoreGame {
     }
 
     switch (payload.getName()) {
+      case "get-leaderboard":
+        const response = payload.createResponse(0, {
+          leaderboard: Database.fetchLeaderBoard()
+        })
+        forwarder.send(response)
+        break
       case "sub-mon-stream":
         if (forwarder instanceof MonitorClientConnection){
           this._monitoringSubscriber[forwarder.getId()] = forwarder
-          forwarder.send(new MsgPayload({group: "server-response", name: "sub-mon-stream", status: 0}))
+          forwarder.send(payload.createResponse(0))
         }else{
           // not allow normal connection to subscribe to monitoring stream
-          forwarder.send(new MsgPayload({group: "server-response", name: "sub-mon-stream", status: 1}))
+          forwarder.send(payload.createResponse(1))
         }
         break
       case "set-nickname": {
         const sendError = () => {
-          forwarder.send(new MsgPayload({group: "server-response", name: "set-nickname", status: 1}))
+          forwarder.send(payload.createResponse(1))
         }
         const n = payload.getMsgData().nickname
         if (!n) {
@@ -102,7 +110,7 @@ export class CoreGame {
         }
 
         user.updateNickname(n)
-        forwarder.send(new MsgPayload({group: "server-response", name: "set-nickname", status: 0}))
+        forwarder.send(new MsgPayload(payload.createResponse(0)))
         forwarder.send(new MsgPayload({group: "credential", name: "server-user", data: user.getUserData(), status: 1}))
         break
       }
@@ -110,16 +118,15 @@ export class CoreGame {
         const user = forwarder.getUser()
         if (!user) {
           // specially for credential
-          forwarder.send(new MsgPayload({group: "server-response", name: "get-user", status: 1}))
+          forwarder.send(new MsgPayload(payload.createResponse(1)))
           break
         }
 
-        forwarder.send(new MsgPayload({group: "server-response", name: "get-user", status: 0}))
+        forwarder.send(new MsgPayload(payload.createResponse(0)))
         forwarder.send(new MsgPayload({group: "credential", name: "server-user", data: user.getUserData(), status: 0}))
       }
-      case "create-og-game":
-        // do some single player stuff
-        const room = new OriginalGameRoom()
+      case "create-og-game": {// do some single player stuff
+        const room = new CompetitiveGameRoom()
         this._roomRegistry[room.getId()] = room
 
         room.setDestroyListener(() => {
@@ -135,20 +142,40 @@ export class CoreGame {
         const joinCode = IDPool.getInstance().getCode(room.getId())
 
         // ready to confirm to user
-        forwarder.send(new MsgPayload({group: "server-response", name: "create-og-game",data:{joinCode: joinCode}, status: 0}))
+        forwarder.send(payload.createResponse(0, {joinCode: joinCode}))
         break
+      }
+      case "create-classic-game": {// do some single player stuff
+        const room = new ClassicGameRoom()
+        this._roomRegistry[room.getId()] = room
+
+        room.setDestroyListener(() => {
+          // free up code space and clear room registry
+          IDPool.getInstance().free(room.getId())
+          delete this._roomRegistry[room.getId()]
+        })
+        // forwarder became player
+        const player = new Player(forwarder)
+        // add player to the room
+        room.addPlayer(player)
+
+        const joinCode = IDPool.getInstance().getCode(room.getId())
+
+        // ready to confirm to user
+        forwarder.send(payload.createResponse(0, {joinCode: joinCode}))
+        break
+      }
       case "join-og-game":
         const code = payload.getMsgData().code
-        console.log(code)
         const id = IDPool.getInstance().findActualID(code)
         if (!id) {
-          forwarder.send(new MsgPayload({group: "server-response", name: "join-og-game", status: 1}))
+          forwarder.send(payload.createResponse(1))
           break
         }
 
         const groom = this._roomRegistry[id]
         if (!groom) {
-          forwarder.send(new MsgPayload({group: "server-response", name: "join-og-game", status: 1}))
+          forwarder.send(payload.createResponse(1))
           break
         }
 
@@ -157,11 +184,11 @@ export class CoreGame {
         const result = groom.addPlayer(p)
 
         if (!result) {
-          forwarder.send(new MsgPayload({group: "server-response", name: "join-og-game", status: 1, data: "join-mid-game-error"}))
+          forwarder.send(payload.createResponse(1, "join-mid-game-error"))
           return;
         }
 
-        forwarder.send(new MsgPayload({group: "server-response", name: "join-og-game", status: 0}))
+        forwarder.send(payload.createResponse(0))
     }
   }
 }

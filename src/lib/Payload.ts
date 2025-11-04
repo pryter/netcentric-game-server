@@ -13,11 +13,13 @@ export type PayloadMsgData = {
 export class Payload<T extends any = any> {
   protected _data: T;
   private _type: string;
+  private _msgId: string;
 
-  constructor(type: PayloadType, data: T)
+  constructor(type: PayloadType, data: T, msgId?: string)
   constructor(raw_message: string)
 
   constructor(...args: any[]) {
+    this._msgId = `m-${new Date().getTime()}`
     if (args.length === 1) {
       const raw_message = args[0]
       const r = JSON.parse(raw_message)
@@ -26,9 +28,14 @@ export class Payload<T extends any = any> {
       }
       this._data = r.data
       this._type = r.type
+      this._msgId = r.mid
     } else {
       this._data = args[1]
       this._type = args[0]
+
+      if (args[2]) {
+        this._msgId = args[2]
+      }
     }
   }
 
@@ -44,14 +51,42 @@ export class Payload<T extends any = any> {
     return this._type;
   }
 
+  public setMsgId(msgId: string) {
+    this._msgId = msgId
+  }
+
+  public getMsgId() {
+    return this._msgId
+  }
+
   public serialize() {
-    return JSON.stringify({type: this._type, data: this._data})
+    return JSON.stringify({type: this._type, data: this._data, mid: this._msgId})
   }
 }
 
 export class MsgPayload extends Payload<PayloadMsgData> {
-  constructor(data: PayloadMsgData) {
-    super("message", data);
+  constructor(payload: Payload)
+  constructor(data: PayloadMsgData)
+
+  constructor(...args: any[]) {
+    const p = args[0]
+    if (p instanceof Payload) {
+      super("message", p.getData(), p.getMsgId())
+    } else {
+      super("message", args[0])
+    }
+  }
+
+  public createResponse(status: number, data?: any) {
+    const copy = new MsgPayload({
+      group: "server-response",
+      name: this._data.name,
+      status,
+      data
+    })
+
+    copy.setMsgId(this.getMsgId())
+    return copy
   }
 
   public isClientAction() {
@@ -75,7 +110,7 @@ export class MsgPayload extends Payload<PayloadMsgData> {
   }
 
   public isError() {
-    return this._data.status ? this._data.status > 0 : true
+    return this._data.status !== undefined ? this._data.status > 0 : true
   }
 
   // override

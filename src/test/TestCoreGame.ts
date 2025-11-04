@@ -2,7 +2,7 @@ import {MsgPayload, Payload, PayloadMsgData} from "@lib/Payload";
 import {ClientConnection} from "@lib/ClientConnection";
 import {Player} from "@lib/player/Player";
 import {CoreGame} from "@lib/CoreGame";
-import {OriginalGameRoom} from "../OriginalGameRoom";
+import {CompetitiveGameRoom} from "@lib/room/CompetitiveGameRoom";
 import {TestPlayer} from "./TestPlayer";
 import {IDPool} from "@lib/IDPool";
 
@@ -18,7 +18,7 @@ export class TestCoreGame extends CoreGame {
       // Start test room
       case "start-test-suite":
         // do some single player stuff
-        const room = new OriginalGameRoom()
+        const room = new CompetitiveGameRoom()
         this._roomRegistry[room.getId()] = room
 
         room.setDestroyListener(() => {

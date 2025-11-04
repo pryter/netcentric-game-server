@@ -171,11 +171,13 @@ export class ClientConnection {
       return
     }
 
+    console.log(messagePayload)
     // forward to listener
     if (messagePayload.isMessage()) {
-      this._msgListeners(new MsgPayload(messagePayload.getData()), this)
+      this._msgListeners(new MsgPayload(messagePayload), this)
     }
     // forward to global listener
-    this._globalMsgListeners(new MsgPayload(messagePayload.getData()), this)
+    console.log(new MsgPayload(messagePayload), "here")
+    this._globalMsgListeners(new MsgPayload(messagePayload), this)
   }
 }

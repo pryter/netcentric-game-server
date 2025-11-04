@@ -91,7 +91,7 @@ export class TestGameRoom extends GameRoom {
     }
   }
 
-  protected onPlayerAction(player: Player, type: PlayerActionType, data: any): void {
+  protected onPlayerAction(player: Player, type: PlayerActionType, data: any): boolean {
     // when player do something
     if (type === PlayerActionType.SUBMIT) {
       const d = parseInt(data as string)
@@ -105,8 +105,13 @@ export class TestGameRoom extends GameRoom {
         const q = this.genQuestion()
         this.currentQuestion = q
         this._frame.question = q[0]
+        return true
       }
+      return false
     }
+
+    return false
+
   }
 
   // helper functions

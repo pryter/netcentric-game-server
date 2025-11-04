@@ -43,7 +43,7 @@ export abstract class GameRoom {
     }
 
     player.bindPlayerActionListener((type, data) => {
-      this.onPlayerAction(player, type, data)
+      return this.onPlayerAction(player, type, data)
     })
 
     player.sendPayload(new FramePayload("SOF"))
@@ -80,7 +80,7 @@ export abstract class GameRoom {
 
   // Get triggered when player action is received except item use action which will be handled by the item itself
   protected abstract onRoomCreated(): void
-  protected abstract onPlayerAction(player: Player, type: PlayerActionType, data: any): void
+  protected abstract onPlayerAction(player: Player, type: PlayerActionType, data: any): boolean
   protected abstract onPlayerLeave(player: Player): void
   protected abstract onGameStart(): void
   protected abstract onMatchResolve(): void

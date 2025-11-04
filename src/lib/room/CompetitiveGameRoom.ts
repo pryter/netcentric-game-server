@@ -3,6 +3,7 @@ import { Player } from "@lib/player/Player";
 import { PlayerActionType } from "@lib/player/PlayerActionType";
 import {FramePayload, MsgPayload} from "@lib/Payload";
 import {clearTimeout} from "node:timers";
+import {Database} from "@lib/Database";
 
 type RoomState =
   | "waiting"
@@ -125,6 +126,16 @@ export class CompetitiveGameRoom extends GameRoom {
     this._solveTimeMsByUid = {};
     this._remainingRoundMs = null;
     this._pendingStartAction = null;
+
+    for (const p of Object.values(this._playerDataRecord)) {
+      const player = this._playerRecord[p.id]
+      if (!player) continue
+
+      const weighted = p.score * 100
+      Database.updateScore(p.id, weighted, "add")
+      player.sendPayload(new MsgPayload({group: "server-response", name: "score-rewarded", data: {score: weighted}}))
+    }
+
     setTimeout(() => {
       this.destroyRoom()
     }, 1000)
@@ -219,7 +230,7 @@ export class CompetitiveGameRoom extends GameRoom {
   }
 
   // ---------------- actions ----------------
-  protected onPlayerAction(player: Player, type: PlayerActionType, data: any): void {
+  protected onPlayerAction(player: Player, type: PlayerActionType, data: any): boolean {
     const pid = player.getUid();
 
     if (type === PlayerActionType.READY) {
@@ -229,29 +240,27 @@ export class CompetitiveGameRoom extends GameRoom {
       this._abortLobbyCountdownIfNeeded();
       // If everyone is ready (and not already counting down/running), start lobby countdown.
       if (this._frame.state === "waiting") this._maybeStartIfAllReady();
-      return;
+      return true
     }
 
     if (type === PlayerActionType.SUBMIT) {
-      if (this._frame.state !== "running") return;
+      if (this._frame.state !== "running") return false
 
       const replaced = data.replace(/×/g, "*").replace(/÷/g, "/")
       const s = this._extractNumbersExpression(replaced);
-      console.log(s)
-      if (!s) return; // only accept numbers-expr
+      if (!s) return false // only accept numbers-expr
 
 
       const parsed = this._parseExprStringNumbersStrict(s, this._digits.length);
-      if (!parsed) return;
-      console.log(parsed)
+      if (!parsed) return false
       const { nums, ops } = parsed;
 
-      if (!this._sameMultiset(nums, this._digits)) return; // must use exactly the digits
+      if (!this._sameMultiset(nums, this._digits)) return false // must use exactly the digits
 
       const val = this._evalNumbersWithConstraints(nums, ops);
-      if (val == null) return;
+      if (val == null) return false
       const correct = val === this._target;
-      if (!correct) return;
+      if (!correct) return false
 
       //correct
       // @ts-ignore
@@ -265,8 +274,10 @@ export class CompetitiveGameRoom extends GameRoom {
       }
 
       if (this._allActiveSolved()) this._finishRound();
-      return;
+      return true
     }
+
+    return false
   }
 
   private _extractNumbersExpression(data: any): string | null {
