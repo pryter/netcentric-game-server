@@ -7,11 +7,9 @@ export class MonitorClientConnection extends ClientConnection {
 
   protected async _handleUpgrade(payload: Payload<{token: string}>) {
     // skip authentication for now
-    if (!process.env.MONITORING_TOKEN) {
-      return;
-    }
 
-    if (payload.getData().token !== process.env.MONITORING_TOKEN) {
+    const t = process.env.MONITORING_TOKEN ?? "12345"
+    if (payload.getData().token !== t) {
       return;
     }
 

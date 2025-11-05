@@ -64,7 +64,7 @@ if (key) {
 }
 
 if (!process.env.MONITORING_TOKEN) {
-  Logger.warn("monitoring token not provided, monitoring will not be available")
+  Logger.warn("monitoring token not provided, monitoring will use default token")
 }
 readline.on("SIGINT",() => {
   process.exit(0);
