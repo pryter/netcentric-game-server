@@ -70,7 +70,41 @@ export class CoreGame {
     this._pool.startListening(port)
   }
 
+  private _handleMonMessages(payload: MsgPayload, forwarder: ClientConnection | MonitorClientConnection) {
+    if (!payload.isMonitoringAction()) {
+      forwarder.send(payload.createResponse(1))
+      return
+    }
+
+    if (!(forwarder instanceof MonitorClientConnection)) {
+      forwarder.send(payload.createResponse(2))
+      return
+    }
+
+    switch (payload.getName()) {
+      case "sub-mon-stream":
+        this._monitoringSubscriber[forwarder.getId()] = forwarder
+        forwarder.send(payload.createResponse(0))
+        break
+      case "reset-room": {
+        const id = payload.getMsgData().roomId
+        if (!id) {forwarder.send(payload.createResponse(1));break}
+        const room = this._roomRegistry[id]
+        if (!room) {forwarder.send(payload.createResponse(1));break}
+        room.resetState()
+        break
+      }
+    }
+
+  }
+
   protected _handleMessage(payload: MsgPayload, forwarder: ClientConnection | MonitorClientConnection) {
+
+    // forward monitoring messages
+    if (payload.isMonitoringAction()) {
+      this._handleMonMessages(payload, forwarder)
+      return
+    }
 
     if (!payload.isClientAction()) {
       return
@@ -82,15 +116,6 @@ export class CoreGame {
           leaderboard: Database.fetchLeaderBoard()
         })
         forwarder.send(response)
-        break
-      case "sub-mon-stream":
-        if (forwarder instanceof MonitorClientConnection){
-          this._monitoringSubscriber[forwarder.getId()] = forwarder
-          forwarder.send(payload.createResponse(0))
-        }else{
-          // not allow normal connection to subscribe to monitoring stream
-          forwarder.send(payload.createResponse(1))
-        }
         break
       case "set-nickname": {
         const sendError = () => {

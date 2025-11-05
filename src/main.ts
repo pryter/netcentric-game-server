@@ -1,4 +1,3 @@
-import {ConnectionPool} from "@lib/ConnectionPool";
 import {CoreGame} from "@lib/CoreGame";
 import {createInterface} from "readline"
 import {EmbeddedKeyManager} from "@lib/EmbeddedKeyManager";
@@ -9,7 +8,7 @@ import {Logger} from "@lib/logger/Logger";
 import chalk from "chalk";
 import {configDotenv} from "dotenv";
 
-const VERSION = "0.0.2a"
+const VERSION = "0.0.3a"
 const readline = createInterface({
   input: process.stdin,
   output: process.stdout
@@ -64,6 +63,9 @@ if (key) {
   });
 }
 
+if (!process.env.MONITORING_TOKEN) {
+  Logger.warn("monitoring token not provided, monitoring will not be available")
+}
 readline.on("SIGINT",() => {
   process.exit(0);
 })

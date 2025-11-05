@@ -4,6 +4,7 @@ import { PlayerActionType } from "@lib/player/PlayerActionType";
 import {FramePayload, MsgPayload} from "@lib/Payload";
 import {clearTimeout} from "node:timers";
 import {Database} from "@lib/Database";
+import {ArithmeticHelper} from "@lib/ArithmeticHelper";
 
 type RoomState =
   | "waiting"
@@ -42,7 +43,7 @@ export class CompetitiveGameRoom extends GameRoom {
   private _playerRecord: Record<string, Player> = {};
   private _playerDataRecord: Record<string, PlayerData> = {};
   private _frame: Omit<RoomFrame, "players"> = {
-    timer: 60,
+    timer: 0,
     breakTimer: 0,
     round: 0,
     winner: null,
@@ -53,12 +54,11 @@ export class CompetitiveGameRoom extends GameRoom {
   private readonly _TOTAL_ROUNDS = 3;
   private readonly _ROUND_SECONDS = 60;
   private readonly _BREAK_SECONDS = 6;
-  private readonly _LOBBY_COUNTDOWN_SECONDS = 3; // NEW: lobby countdown length
+  private readonly _LOBBY_COUNTDOWN_SECONDS = 4; // NEW: lobby countdown length
   private readonly _POINTS_WIN = 1; // fastest correct only
 
   private _digits: number[] = [];
   private _target = 0;
-  private _debugSolutionNumbersExpr = ""; // e.g., "4-4+8-2+6"
   private _roundEndMs = 0;
   private _roundStartMs = 0;
   private _winnersThisRound: Set<string> = new Set();
@@ -69,10 +69,13 @@ export class CompetitiveGameRoom extends GameRoom {
 
   // action to perform after lobby countdown finishes
   private _pendingStartAction: "resume" | "start-new" | null = null;
-
   private _roomDestroyTimeout: NodeJS.Timeout | null = null;
+  private _possibleAnswerExpr: string | null = null;
 
-  // ---------------- lifecycle ----------------
+
+
+
+  // required implementations
   protected onRoomCreated(): void {}
 
   protected onGameStart(): void {
@@ -92,11 +95,6 @@ export class CompetitiveGameRoom extends GameRoom {
   }
 
   protected onMatchPause(reason: MatchPauseReason, player: Player): void {
-    // if (this._frame.state === "running") {
-    //   const now = Date.now();
-    //   this._remainingRoundMs = Math.max(0, this._roundEndMs - now);
-    // }
-
     // Game should not pause tho
 
     if (reason.type === "p-dis") {
@@ -118,14 +116,6 @@ export class CompetitiveGameRoom extends GameRoom {
 
   protected onMatchResolve(): void {
     this._frame.state = "resolved";
-    this._frame.question = null
-    this._frame.timer = 0;
-    this._frame.breakTimer = 0;
-    this._digits = [];
-    this._winnersThisRound.clear();
-    this._solveTimeMsByUid = {};
-    this._remainingRoundMs = null;
-    this._pendingStartAction = null;
 
     for (const p of Object.values(this._playerDataRecord)) {
       const player = this._playerRecord[p.id]
@@ -141,7 +131,6 @@ export class CompetitiveGameRoom extends GameRoom {
     }, 1000)
   }
 
-  // ---------------- players ----------------
   protected onPlayerJoin(player: Player): boolean {
 
     const uid = player.getUid();
@@ -201,35 +190,6 @@ export class CompetitiveGameRoom extends GameRoom {
     this._abortLobbyCountdownIfNeeded();
   }
 
-  // ---------------- ready helpers ----------------
-  private _setReady(pid: string, val: boolean): void {
-    const d = this._playerDataRecord[pid];
-    if (d) d.isReady = val;
-  }
-  private _everyoneReady(): boolean {
-    const arr = Object.values(this._playerDataRecord);
-    return arr.length > 0 && arr.every((p) => p.isReady);
-  }
-  private _maybeStartIfAllReady(): void {
-    if (this._frame.state !== "waiting") return;
-    if (this._everyoneReady()) {
-      // start a 3s lobby countdown; choose resume vs new-start after it finishes
-      this._frame.state = "lobby-countdown";
-      this._frame.breakTimer = this._LOBBY_COUNTDOWN_SECONDS;
-      this._frame.timer = 0;
-      this._pendingStartAction =
-        this._remainingRoundMs != null && this._digits.length > 0 ? "resume" : "start-new";
-    }
-  }
-  private _abortLobbyCountdownIfNeeded(): void {
-    if (this._frame.state === "lobby-countdown" && !this._everyoneReady()) {
-      this._frame.state = "waiting";
-      this._frame.breakTimer = 0;
-      this._pendingStartAction = null;
-    }
-  }
-
-  // ---------------- actions ----------------
   protected onPlayerAction(player: Player, type: PlayerActionType, data: any): boolean {
     const pid = player.getUid();
 
@@ -246,19 +206,16 @@ export class CompetitiveGameRoom extends GameRoom {
     if (type === PlayerActionType.SUBMIT) {
       if (this._frame.state !== "running") return false
 
-      const replaced = data.replace(/×/g, "*").replace(/÷/g, "/")
-      const s = this._extractNumbersExpression(replaced);
-      if (!s) return false // only accept numbers-expr
+      const s = data.replace(/×/g, "*").replace(/÷/g, "/")
+      if (!s) return false
 
-
-      const parsed = this._parseExprStringNumbersStrict(s, this._digits.length);
+      // NEW: parse & eval with parentheses support (and constraints)
+      const parsed = ArithmeticHelper.parseAndEvalWithParentheses(s, this._digits.length);
       if (!parsed) return false
-      const { nums, ops } = parsed;
 
-      if (!this._sameMultiset(nums, this._digits)) return false // must use exactly the digits
+      const { val, nums } = parsed;
+      if (!ArithmeticHelper.isSameMultiset(nums, this._digits)) return false
 
-      const val = this._evalNumbersWithConstraints(nums, ops);
-      if (val == null) return false
       const correct = val === this._target;
       if (!correct) return false
 
@@ -280,16 +237,6 @@ export class CompetitiveGameRoom extends GameRoom {
     return false
   }
 
-  private _extractNumbersExpression(data: any): string | null {
-    // ONLY accept numbers expression
-    const tryStrings = [data, data?.expr, data?.expression, data?.answer, data?.text];
-    for (const s of tryStrings) {
-      if (typeof s === "string") return s.trim();
-    }
-    return null;
-  }
-
-  // ---------------- tick ----------------
   protected onServerTick(): void {
     const now = Date.now();
     if (this._lastTickMs === 0) this._lastTickMs = now;
@@ -342,14 +289,66 @@ export class CompetitiveGameRoom extends GameRoom {
     return Object.values(this._playerRecord)
   }
 
+  protected onRoomReset(): void {
+    for (const id of Object.keys(this._playerDataRecord)) {
+      const d = this._playerDataRecord[id];
+      if (!d) continue;
+      d.isReady = false;
+      d.roundStatus = "thinking";
+    }
+
+    this._possibleAnswerExpr = "";
+    this._frame.state = "waiting";
+    this._frame.question = null
+    this._frame.timer = 0;
+    this._frame.breakTimer = 0;
+    this._frame.round = 0;
+    this._digits = [];
+    this._winnersThisRound.clear();
+    this._solveTimeMsByUid = {};
+    this._remainingRoundMs = null;
+    this._pendingStartAction = null;
+  }
+
   public getRoomData(): Record<string, any> {
     return {
       ...this._frame,
+      possibleAnswer: this._possibleAnswerExpr,
       players: this._playerDataRecord,
     }
   }
 
-  // ---------------- rounds ----------------
+  // helpers
+  private _setReady(pid: string, val: boolean): void {
+    const d = this._playerDataRecord[pid];
+    if (d) d.isReady = val;
+  }
+
+  private _everyoneReady(): boolean {
+    const arr = Object.values(this._playerDataRecord);
+    return arr.length > 0 && arr.every((p) => p.isReady);
+  }
+
+  private _maybeStartIfAllReady(): void {
+    if (this._frame.state !== "waiting") return;
+    if (this._everyoneReady()) {
+      // start a 3s lobby countdown; choose resume vs new-start after it finishes
+      this._frame.state = "lobby-countdown";
+      this._frame.breakTimer = this._LOBBY_COUNTDOWN_SECONDS;
+      this._frame.timer = 0;
+      this._pendingStartAction =
+        this._remainingRoundMs != null && this._digits.length > 0 ? "resume" : "start-new";
+    }
+  }
+
+  private _abortLobbyCountdownIfNeeded(): void {
+    if (this._frame.state === "lobby-countdown" && !this._everyoneReady()) {
+      this._frame.state = "waiting";
+      this._frame.breakTimer = 0;
+      this._pendingStartAction = null;
+    }
+  }
+
   private _startNextRound(): void {
     this._frame.round += 1;
     if (this._frame.round > this._TOTAL_ROUNDS) {
@@ -357,14 +356,13 @@ export class CompetitiveGameRoom extends GameRoom {
       return;
     }
 
-    this._digits = this._generateDigits(5);
+    this._digits = ArithmeticHelper.generateDigits(5);
     if (this._digits.length !== 5 || this._digits.some((d) => !Number.isInteger(d) || d < 1 || d > 9)) {
       this._digits = [1, 2, 3, 4, 5];
     }
 
-    const made = this._makeReachableTargetUsingAllDigits(this._digits);
+    const made = ArithmeticHelper.makeReachableTargetUsingAllDigits(this._digits);
     this._target = made.target;
-    this._debugSolutionNumbersExpr = made.numbersExpr; // show numbers-based solution
 
     const now = Date.now();
     this._roundStartMs = now;
@@ -384,7 +382,7 @@ export class CompetitiveGameRoom extends GameRoom {
     this._remainingRoundMs = null;
 
     this._frame.question = {problem: this._digits, target: this._target}
-    console.log(`Generated possible answer = ${made.numbersExpr}`)
+    this._possibleAnswerExpr = made.numbersExpr;
     this._frame.state = "running";
   }
 
@@ -436,142 +434,5 @@ export class CompetitiveGameRoom extends GameRoom {
     this._roundEndMs = Date.now() + this._remainingRoundMs;
     this._remainingRoundMs = null;
     this._frame.state = "running";
-  }
-
-  // ---------------- parsing & eval (numbers-only) ----------------
-  private _parseExprStringNumbersStrict(expr: string, n: number): { nums: number[]; ops: string[] } | null {
-    const s = expr.replace(/\s+/g, "").replace(/^=/, "");
-    if (s.length === 0) return null;
-    if (/[^0-9+\-*/]/.test(s)) return null;
-
-    const tokens: string[] = [];
-    let i = 0;
-    while (i < s.length) {
-      const ch = s[i]!;
-      if (/[+\-*/]/.test(ch)) {
-        tokens.push(ch);
-        i++;
-      } else {
-        let j = i;
-        while (j < s.length && /[0-9]/.test(s[j]!)) j++;
-        tokens.push(s.slice(i, j));
-        i = j;
-      }
-    }
-    if (tokens.length !== 2 * n - 1) return null;
-
-    const nums: number[] = [];
-    const ops: string[] = [];
-    for (let k = 0; k < tokens.length; k++) {
-      const tk = tokens[k]!;
-      if (k % 2 === 0) {
-        if (!/^\d+$/.test(tk)) return null;
-        const val = Number(tk);
-        if (!Number.isInteger(val) || val < 1 || val > 9) return null;
-        nums.push(val);
-      } else {
-        if (!/^[+\-*/]$/.test(tk)) return null;
-        ops.push(tk);
-      }
-    }
-    return { nums, ops };
-  }
-
-  private _sameMultiset(a: number[], b: number[]): boolean {
-    if (a.length !== b.length) return false;
-    const count = new Map<number, number>();
-    for (const x of b) count.set(x, (count.get(x) ?? 0) + 1);
-    for (const x of a) {
-      const c = count.get(x) ?? 0;
-      if (c <= 0) return false;
-      count.set(x, c - 1);
-    }
-    for (const v of count.values()) if (v !== 0) return false;
-    return true;
-  }
-
-  private _evalNumbersWithConstraints(nums: number[], ops: string[]): number | null {
-    if (nums.length === 0) return null;
-    let acc = nums[0]!;
-    if (!Number.isInteger(acc) || acc < 0) return null;
-
-    for (let i = 0; i < ops.length; i++) {
-      const op = ops[i]!;
-      const rhs = nums[i + 1]!;
-      if (!Number.isInteger(rhs) || rhs < 0) return null;
-      switch (op) {
-        case "+":
-          acc = acc + rhs;
-          break;
-        case "-":
-          if (acc - rhs < 0) return null;
-          acc = acc - rhs;
-          break;
-        case "*":
-          acc = acc * rhs;
-          break;
-        case "/":
-          if (rhs === 0) return null;
-          if (acc % rhs !== 0) return null;
-          acc = Math.trunc(acc / rhs);
-          break;
-        default:
-          return null;
-      }
-      if (!Number.isInteger(acc) || acc < 0) return null;
-    }
-    return acc;
-  }
-
-  // ---------------- utils & generators ----------------
-  private _generateDigits(n: number): number[] {
-    const out: number[] = [];
-    for (let i = 0; i < n; i++) out.push(1 + Math.floor(Math.random() * 9));
-    return out;
-  }
-
-  private _randChoice<T>(arr: readonly T[]): T {
-    const idx = Math.floor(Math.random() * arr.length);
-    const v = arr[idx];
-    if (v === undefined) {
-      if (arr.length === 0) throw new Error("_randChoice: empty array");
-      return arr[0] as T;
-    }
-    return v as T;
-  }
-
-  private _shuffleInPlace(a: number[]): void {
-    for (let i = a.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      const ai = a[i]!;
-      const aj = a[j]!;
-      a[i] = aj;
-      a[j] = ai;
-    }
-  }
-
-  private _makeReachableTargetUsingAllDigits(digits: number[]): { target: number; numbersExpr: string } {
-    const n = digits.length;
-    const opsPool = ["+", "-", "*", "/"] as const;
-
-    for (let attempt = 0; attempt < 1500; attempt++) {
-      const order = [...Array(n).keys()];
-      this._shuffleInPlace(order);
-
-      const ops: string[] = [];
-      for (let i = 0; i < n - 1; i++) ops.push(this._randChoice(opsPool) as string);
-
-      const nums: number[] = order.map((idx) => digits[idx]!);
-      const val = this._evalNumbersWithConstraints(nums, ops);
-      if (val != null && val <= 99) {
-        let expr = String(nums[0]);
-        for (let i = 0; i < ops.length; i++) expr += ops[i]! + String(nums[i + 1]!);
-        return { target: val, numbersExpr: expr };
-      }
-    }
-
-    const target = digits.reduce((a, b) => a + b, 0);
-    const expr = digits.join("+");
-    return { target, numbersExpr: expr };
   }
 }

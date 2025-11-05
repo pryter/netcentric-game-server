@@ -76,6 +76,10 @@ export abstract class GameRoom {
     }
   }
 
+  public resetState() {
+    this.onRoomReset()
+  }
+
   protected abstract onPlayerJoin(player: Player): boolean
 
   // Get triggered when player action is received except item use action which will be handled by the item itself
@@ -88,4 +92,5 @@ export abstract class GameRoom {
   protected abstract onMatchPause(reason: MatchPauseReason, player: Player): void
   protected abstract getAllPlayers(): Player[]
   public abstract getRoomData(): Record<string, any>
+  protected abstract onRoomReset(): void
 }

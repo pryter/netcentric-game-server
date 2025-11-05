@@ -4,7 +4,7 @@ export type FrameData = Record<string, any>
 
 // Status: 0 = success, 1 = error, 2 = unknown
 export type PayloadMsgData = {
-  group: "client-action" | "server-response" | "upgrade" | "credential" | "monitoring-event",
+  group: "client-action" | "server-response" | "upgrade" | "credential" | "monitoring-event" | "monitoring-action",
   name: string,
   status?: number,
   data?: any
@@ -91,6 +91,9 @@ export class MsgPayload extends Payload<PayloadMsgData> {
 
   public isClientAction() {
     return this._data.group === "client-action"
+  }
+  public isMonitoringAction() {
+    return this._data.group === "monitoring-action"
   }
 
   public isServerResponse() {

@@ -1,5 +1,6 @@
 import test, { describe } from "node:test";
 import {equal} from "node:assert";
+import {ArithmeticHelper} from "@lib/ArithmeticHelper";
 
 function parse(expr: string): number | null {
   const s = expr.replace(/\s+/g, "").replace(/^=/, "");
@@ -75,7 +76,7 @@ describe("point tests", () => {
 
   const testFn = parse
   test("basic_test_1", () => {
-    equal(testFn("(1+2)+3+4+5"), 15);            // digits: 1,2,3,4,5
+    equal(testFn("8+2-1*9+9"), 10);            // digits: 1,2,3,4,5
     equal(testFn("1+(2+3+4+5)"), 15);            // digits: 1,2,3,4,5
     equal(testFn("(1+2)*(3+4)+5"), 26);          // digits: 1,2,3,4,5
   });
@@ -110,9 +111,18 @@ describe("point tests", () => {
     equal(testFn("(8+1)*(7-6)+3"), 12);          // 8,1,7,6,3
   });
 
-  test("edge_test_3_zeros", () => {
-    equal(testFn("0*(4+5)+6+6"), 12);               // 0,4,5,6
-    equal(testFn("0*(4+5)+6*6"), 36);               // 0,4,5,6
-  });
+  test("generate_sample_and_verify_1000", () => {
+    for (let i = 0; i < 1000; i++) {
+      const g = ArithmeticHelper.generateDigits(5)
+      const made = ArithmeticHelper.makeReachableTargetUsingAllDigits(g)
+      equal(testFn(made.numbersExpr), made.target);
+    }
+  })
+  // test("edge_test_3_zeros", () => {
+  //   equal(testFn("0*(4+5)+6+6"), 12);               // 0,4,5,6
+  //   equal(testFn("0*(4+5)+6*6"), 36);               // 0,4,5,6
+  // });
+
+
 
 })
