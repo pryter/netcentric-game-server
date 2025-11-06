@@ -39,6 +39,8 @@ export class Player extends User {
         case "submit":
           this._submitAnswer(cb)
           break
+        case "play-again":
+          this._playerActionListener(PlayerActionType.PLAY_AGAIN , true)
         case "use-item":
           // TODO: implement use item
           break
@@ -81,6 +83,11 @@ export class Player extends User {
 
   private _setReady(payload: MsgPayload): boolean {
     const actionResult = this._playerActionListener(PlayerActionType.READY, payload.getMsgData())
+    if (actionResult) {
+      this._connection.send(payload.createResponse(0))
+    }else{
+      this._connection.send(payload.createResponse(1))
+    }
     return actionResult
   }
 

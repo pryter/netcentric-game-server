@@ -1,5 +1,6 @@
 export enum PlayerActionType {
   READY = "ready",
   SUBMIT = "submit",
-  USE_ITEM = "use-item"
+  USE_ITEM = "use-item",
+  PLAY_AGAIN = "play-again"
 }

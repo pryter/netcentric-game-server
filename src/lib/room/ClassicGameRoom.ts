@@ -1,8 +1,8 @@
-import { GameRoom, MatchPauseReason } from "@lib/GameRoom";
-import { Player } from "@lib/player/Player";
-import { PlayerActionType } from "@lib/player/PlayerActionType";
-import { FramePayload } from "@lib/Payload";
-import { clearTimeout } from "node:timers";
+import {GameRoom, MatchPauseReason} from "@lib/GameRoom";
+import {Player} from "@lib/player/Player";
+import {PlayerActionType} from "@lib/player/PlayerActionType";
+import {FramePayload} from "@lib/Payload";
+import {clearTimeout} from "node:timers";
 import {ArithmeticHelper} from "@lib/ArithmeticHelper";
 
 type RoomState =
@@ -29,6 +29,7 @@ type Question = {
 };
 
 export type RoomFrame = {
+  gameType: "classic"
   players: Record<string, PlayerData>;
   timer: number;
   breakTimer: number;
@@ -46,6 +47,7 @@ export class ClassicGameRoom extends GameRoom {
   private _playerRecord: Record<string, Player> = {};
   private _playerDataRecord: Record<string, PlayerData> = {};
   private _frame: Omit<RoomFrame, "players"> = {
+    gameType: "classic",
     timer: 60,
     breakTimer: 0,
     round: 0,
@@ -62,7 +64,7 @@ export class ClassicGameRoom extends GameRoom {
   private readonly _BREAK_SECONDS = 6;
   private readonly _LOBBY_COUNTDOWN_SECONDS = 3;
   private readonly _POINTS_WIN = 1;
-  private readonly _SCOREBOARD_SECONDS = 6;
+  private readonly _SCOREBOARD_SECONDS = 60;
 
   private _digits: number[] = [];
   private _target = 0;
@@ -147,11 +149,6 @@ export class ClassicGameRoom extends GameRoom {
 
     const scoreLines = ranking.map((r, i) => `${i + 1}. ${r.displayName} — ${r.score}`);
     this._frame.question = { problem: scoreLines, target: 0 };
-
-    // After a short scoreboard display, move to waiting for the next game
-    setTimeout(() => {
-      this.onRoomReset()
-    }, this._SCOREBOARD_SECONDS * 1000);
   }
 
   protected onPlayerJoin(player: Player): boolean {
@@ -212,10 +209,12 @@ export class ClassicGameRoom extends GameRoom {
       if (!(this._frame.state === "running" && pid === this._currentPlayerId)) return false
 
       // normalize special symbols
-      const s = data.replace(/×/g, "*").replace(/÷/g, "/")
+      const s = (typeof data === "string" ? data : String(data ?? ""))
+        .replace(/×/g, "*")
+        .replace(/÷/g, "/");
       if (!s) return false
 
-      // NEW: parse & eval with parentheses support (and constraints)
+      // parse & eval with parentheses support (and constraints)
       const parsed = ArithmeticHelper.parseAndEvalWithParentheses(s, this._digits.length);
       if (!parsed) return false
 
@@ -229,7 +228,7 @@ export class ClassicGameRoom extends GameRoom {
         `[Submit] pid=${pid} name=${this._playerDataRecord[pid]?.displayName} expr="${s}" val=${val} correct=${correct}`
       );
 
-      if (!correct) return false
+      if (!correct) return true
 
       const pdata = this._playerDataRecord[pid];
       if (pdata) pdata.roundStatus = "solved";
@@ -244,10 +243,16 @@ export class ClassicGameRoom extends GameRoom {
         console.log(`[Correct] pid=${pid} usedMs=${usedMs}ms`);
       }
 
-      this._endCurrentTurn("correct");
+      // IMPORTANT CHANGE:
+      // Do NOT advance the turn on correct. Keep the turn until the 60s timer expires.
+      // this._endCurrentTurn("correct");  <-- removed
+
       return true
     }
 
+    if (type === PlayerActionType.PLAY_AGAIN) {
+      this.onRoomReset()
+    }
     return false
   }
 
@@ -313,9 +318,7 @@ export class ClassicGameRoom extends GameRoom {
     }
 
     this._frame.state = "waiting";
-    this._frame.turnBanner = this._lastGameWinnerId
-      ? `Next game: ${this._playerDataRecord[this._lastGameWinnerId]?.displayName ?? "Winner"} starts. Press Ready.`
-      : "Press Ready to start next game.";
+    this._frame.gameType = "classic";
     this._frame.question = { problem: [], target: 0 };
     this._frame.timer = 60;
     this._frame.breakTimer = 0;
@@ -335,15 +338,6 @@ export class ClassicGameRoom extends GameRoom {
     this._currentPlayerId = null;
     this._matchBaseOrder = null;
   }
-
-  // this should not be included
-  // private _extractNumbersExpression(data: any): string | null {
-  //   const tryStrings = [data, data?.expr, data?.expression, data?.answer, data?.text];
-  //   for (const s of tryStrings) {
-  //     if (typeof s === "string") return s.trim();
-  //   }
-  //   return null;
-  // }
 
   // ---------------- ready helpers ----------------
   private _setReady(pid: string, val: boolean): void {
@@ -403,6 +397,7 @@ export class ClassicGameRoom extends GameRoom {
     }
 
     return {
+      gameType: "classic",
       players: basePlayers,
       timer: this._frame.timer,
       breakTimer: this._frame.breakTimer,
