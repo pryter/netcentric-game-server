@@ -541,6 +541,10 @@ export class ClassicGameRoom extends GameRoom {
       }
       return
     }
+
+    if (_reason === "forfeit") {
+      return;
+    }
     this._advanceToNextTurnOrFinishRound();
   }
 
