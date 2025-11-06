@@ -36,6 +36,7 @@ export type RoomFrame = {
   winner: PlayerData | null;
   state: RoomState;
   question: Question | null;
+  gameType: string
 };
 
 export class CompetitiveGameRoom extends GameRoom {
@@ -49,6 +50,7 @@ export class CompetitiveGameRoom extends GameRoom {
     winner: null,
     state: "waiting",
     question: null,
+    gameType: "competitive"
   };
 
   private readonly _TOTAL_ROUNDS = 3;
@@ -71,9 +73,16 @@ export class CompetitiveGameRoom extends GameRoom {
   private _pendingStartAction: "resume" | "start-new" | null = null;
   private _roomDestroyTimeout: NodeJS.Timeout | null = null;
   private _possibleAnswerExpr: string | null = null;
+  private _allowSolo: boolean = false;
 
 
-
+  constructor(allowSolo: boolean = false) {
+    super()
+    if (allowSolo) {
+      this._frame.gameType = "solo"
+    }
+    this._allowSolo = allowSolo;
+  }
 
   // required implementations
   protected onRoomCreated(): void {}
@@ -121,9 +130,12 @@ export class CompetitiveGameRoom extends GameRoom {
       const player = this._playerRecord[p.id]
       if (!player) continue
 
-      const weighted = p.score * 100
-      Database.updateScore(p.id, weighted, "add")
-      player.sendPayload(new MsgPayload({group: "server-response", name: "score-rewarded", data: {score: weighted}}))
+      // dont reward solo players
+      if (!this._allowSolo) {
+        const weighted = p.score * 100
+        Database.updateScore(p.id, weighted, "add")
+        player.sendPayload(new MsgPayload({group: "server-response", name: "score-rewarded", data: {score: weighted}}))
+      }
     }
 
     setTimeout(() => {
@@ -331,6 +343,7 @@ export class CompetitiveGameRoom extends GameRoom {
 
   private _maybeStartIfAllReady(): void {
     if (this._frame.state !== "waiting") return;
+    if (!this._allowSolo && Object.values(this._playerDataRecord).length <= 1) return;
     if (this._everyoneReady()) {
       // start a 3s lobby countdown; choose resume vs new-start after it finishes
       this._frame.state = "lobby-countdown";
@@ -351,10 +364,6 @@ export class CompetitiveGameRoom extends GameRoom {
 
   private _startNextRound(): void {
     this._frame.round += 1;
-    if (this._frame.round > this._TOTAL_ROUNDS) {
-      this.onMatchResolve();
-      return;
-    }
 
     this._digits = ArithmeticHelper.generateDigits(5);
     if (this._digits.length !== 5 || this._digits.some((d) => !Number.isInteger(d) || d < 1 || d > 9)) {
@@ -397,6 +406,11 @@ export class CompetitiveGameRoom extends GameRoom {
     }
     this._frame.winner = winnerUid ? (this._playerDataRecord[winnerUid] ?? null) : null;
     if (winnerUid) this._bumpScore(winnerUid, this._POINTS_WIN);
+
+    if (this._frame.round >= this._TOTAL_ROUNDS) {
+      this.onMatchResolve();
+      return;
+    }
 
     this._frame.state = "next-round-countdown";
     this._frame.breakTimer = this._BREAK_SECONDS;

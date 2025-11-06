@@ -150,6 +150,26 @@ export class CoreGame {
         forwarder.send(new MsgPayload(payload.createResponse(0)))
         forwarder.send(new MsgPayload({group: "credential", name: "server-user", data: user.getUserData(), status: 0}))
       }
+      case "create-solo-game": {// do some single player stuff
+        const room = new CompetitiveGameRoom(true)
+        this._roomRegistry[room.getId()] = room
+
+        room.setDestroyListener(() => {
+          // free up code space and clear room registry
+          IDPool.getInstance().free(room.getId())
+          delete this._roomRegistry[room.getId()]
+        })
+        // forwarder became player
+        const player = new Player(forwarder)
+        // add player to the room
+        room.addPlayer(player)
+
+        const joinCode = IDPool.getInstance().getCode(room.getId())
+
+        // ready to confirm to user
+        forwarder.send(payload.createResponse(0, {joinCode: joinCode}))
+        break
+      }
       case "create-og-game": {// do some single player stuff
         const room = new CompetitiveGameRoom()
         this._roomRegistry[room.getId()] = room

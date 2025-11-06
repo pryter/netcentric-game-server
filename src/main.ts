@@ -8,7 +8,7 @@ import {Logger} from "@lib/logger/Logger";
 import chalk from "chalk";
 import {configDotenv} from "dotenv";
 
-const VERSION = "0.0.4a"
+const VERSION = "0.0.5a"
 const readline = createInterface({
   input: process.stdin,
   output: process.stdout

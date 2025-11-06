@@ -309,7 +309,7 @@ export class ClassicGameRoom extends GameRoom {
   }
 
   public getRoomData(): Record<string, any> {
-    return { ...this._frame, players: this._playerDataRecord };
+    return { ...this._frame, players: this._playerDataRecord, possibleAnswer: this._debugSolutionNumbersExpr, };
   }
 
   protected onRoomReset(deep:boolean = true): void {
@@ -357,7 +357,7 @@ export class ClassicGameRoom extends GameRoom {
 
   private _maybeStartIfAllReady(): void {
     if (this._frame.state !== "waiting") return;
-    if (this._everyoneReady()) {
+    if (this._everyoneReady() && Object.values(this._playerDataRecord).length > 1) {
       this._frame.state = "lobby-countdown";
       this._frame.breakTimer = this._LOBBY_COUNTDOWN_SECONDS;
       this._frame.timer = 0;
@@ -421,10 +421,10 @@ export class ClassicGameRoom extends GameRoom {
   // ---------------- round & turn sequencing ----------------
   private _startNextRound(): void {
     this._frame.round += 1;
-    if (this._frame.round > this._TOTAL_ROUNDS) {
-      this.onMatchResolve();
-      return;
-    }
+    // if (this._frame.round > this._TOTAL_ROUNDS) {
+    //   this.onMatchResolve();
+    //   return;
+    // }
 
     // New puzzle
     this._digits = ArithmeticHelper.generateDigits(5)
@@ -574,6 +574,12 @@ export class ClassicGameRoom extends GameRoom {
     console.log(
       `[Round ${this._frame.round}] winner=${winnerUid ?? "none"} bestMs=${Number.isFinite(bestMs) ? bestMs : "-"}`
     );
+
+    // finished last round -> resolve
+    if (this._frame.round >= this._TOTAL_ROUNDS) {
+      this.onMatchResolve();
+      return;
+    }
 
     // Prepare for the next round
     this._frame.state = "next-round-countdown";
