@@ -163,6 +163,10 @@ export class ClassicGameRoom extends GameRoom {
       if (this._frame.state !== "waiting") return false;
     }
 
+    if (Object.values(this._playerDataRecord).length >= 2) {
+      return false
+    }
+
     this._playerDataRecord[uid] = {
       isReady: false,
       roundStatus: "thinking",
@@ -180,6 +184,7 @@ export class ClassicGameRoom extends GameRoom {
     delete this._playerRecord[uid];
 
     const kickPeriod = this._frame.state === "waiting" ? 10_000 : 60_000;
+
     setTimeout(() => {
       if (uid in this._playerRecord) return;
 
@@ -243,15 +248,13 @@ export class ClassicGameRoom extends GameRoom {
         console.log(`[Correct] pid=${pid} usedMs=${usedMs}ms`);
       }
 
-      // IMPORTANT CHANGE:
-      // Do NOT advance the turn on correct. Keep the turn until the 60s timer expires.
-      // this._endCurrentTurn("correct");  <-- removed
+      this._endCurrentTurn("correct");
 
       return true
     }
 
     if (type === PlayerActionType.PLAY_AGAIN) {
-      this.onRoomReset()
+      this.onRoomReset(false)
     }
     return false
   }
@@ -309,11 +312,14 @@ export class ClassicGameRoom extends GameRoom {
     return { ...this._frame, players: this._playerDataRecord };
   }
 
-  protected onRoomReset(): void {
+  protected onRoomReset(deep:boolean = true): void {
     for (const id of Object.keys(this._playerDataRecord)) {
       const d = this._playerDataRecord[id];
       if (!d) continue;
       d.isReady = false;
+      if(deep){
+        d.score = 0
+      }
       d.roundStatus = "thinking";
     }
 
@@ -348,6 +354,7 @@ export class ClassicGameRoom extends GameRoom {
     const arr = Object.values(this._playerDataRecord).filter((x): x is PlayerData => !!x);
     return arr.length > 0 && arr.every((p) => p.isReady);
   }
+
   private _maybeStartIfAllReady(): void {
     if (this._frame.state !== "waiting") return;
     if (this._everyoneReady()) {
@@ -452,15 +459,34 @@ export class ClassicGameRoom extends GameRoom {
       .filter((p): p is PlayerData => !!p && p.isReady && !p.isDisconnected)
       .map((p) => p.id);
 
+
+    function shuffle(array: string[]) {
+      let currentIndex = array.length;
+
+      // While there remain elements to shuffle...
+      while (currentIndex != 0) {
+
+        // Pick a remaining element...
+        let randomIndex = Math.floor(Math.random() * currentIndex);
+        currentIndex--;
+
+        //@ts-ignore
+        [array[currentIndex], array[randomIndex]] = [
+          array[randomIndex], array[currentIndex]];
+      }
+    }
     if (this._frame.round === 1 || !this._matchBaseOrder) {
       let base = readyConnectedIds.slice();
       if (this._lastGameWinnerId && base.includes(this._lastGameWinnerId)) {
         base = this._rotateToStart(base, this._lastGameWinnerId);
+      }else{
+        shuffle(base)
       }
       this._matchBaseOrder = base;
     }
 
     const base = this._matchBaseOrder ?? readyConnectedIds;
+
     this._turnOrder = base.filter((id) => {
       const p = this._playerDataRecord[id];
       return !!p && p.isReady && !p.isDisconnected;
@@ -508,6 +534,13 @@ export class ClassicGameRoom extends GameRoom {
   }
 
   private _endCurrentTurn(_reason: "timeout" | "correct" | "forfeit"): void {
+    if (_reason === "correct") {
+      const fives = Date.now() + 5 * 1000;
+      if (this._turnEndMs > fives) {
+        this._turnEndMs = fives;
+      }
+      return
+    }
     this._advanceToNextTurnOrFinishRound();
   }
 
